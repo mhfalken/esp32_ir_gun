@@ -17,7 +17,7 @@
     M5Stack Core2: M5Stack-Core2
 
   Sounds: 
-    MP3, Mono, 16kHz
+    MP3, Mono, 44100Hz, 32kb/s
     .mp3-> .h file, use: Bin2C.exe
   Sound Lib fix: See buttom of lightsaber_V3 file.
 */
@@ -204,9 +204,9 @@ AudioGeneratorMP3 *audioMp3;
 AudioFileSourcePROGMEM *audiofileProg;
 AudioOutputI2S *audioOut;
 
-#include "skud2.h"
-#include "hit1.h"
-#include "lowbatt1.h"
+#include "shot.h"
+#include "hit.h"
+#include "lowbatt.h"
 
 typedef struct {
   const unsigned char *data;
@@ -214,9 +214,9 @@ typedef struct {
 } soundInfo_t; 
 
 soundInfo_t soundInfo[] = {
-  {skud2Sound, sizeof(skud2Sound)},
-  {hit1Sound, sizeof(hit1Sound)},
-  {lowBatt1Sound, sizeof(lowBatt1Sound)},
+  {shotSound, sizeof(shotSound)},
+  {hitSound, sizeof(hitSound)},
+  {lowbattSound, sizeof(lowbattSound)},
 };
 
 #define SOUND_shot      0
@@ -672,6 +672,7 @@ void IrxPoller()
       p2 = postAmpMs;
       p2 /= 1000;
       sprintf(logList[logIndex++], "%1.2f %i:%i %1.2f", p1, groupId, gunId, p2);
+      printf("%1.2f %i:%i %1.2f", p1, groupId, gunId, p2);
       if (logIndex == LOG_ENTRY_CNT)
         logIndex = 0;
       logCnt++;
