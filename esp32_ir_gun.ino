@@ -225,7 +225,8 @@ soundInfo_t soundInfo[] = {
 
 void SoundInit(void)
 {
-  audioOut = new AudioOutputI2S(0, 1); // 2nd parameter: 0: External DAC, 1: INTERNAL_DAC
+  audioOut = new AudioOutputI2S(0, 1, 64); // 2nd parameter: 0: External DAC, 1: INTERNAL_DAC
+                                           // 64: buffers for app. 160 ms of delay between polls
   audioOut->SetOutputModeMono(true);
   if (soundLevel == SOUND_LEVEL_off)
     audioOut->SetGain(1);  // Low. (Off, but some sounds are allowed)
@@ -373,6 +374,7 @@ void IrLedPowerSet(uint8_t level)
 void setup()
 {
   int i;
+  char s[50];
 
   Serial.begin(115200);
   tft.initR(INITR_MINI160x80); // Init ST7735S chip, black tab
@@ -387,12 +389,22 @@ void setup()
   tft.setRotation(3);
   tft.fillScreen(TFT_COLOR_black);
   tft.setRotation(3); 
+
   tft.setTextSize(1);
   tft.setFont(&FreeSansBold9pt7b);
+  tft.setCursor(65, tftLine[0]);
+  tft.setTextColor(TFT_COLOR_white);
+  tft.print("SW");
+  tft.setCursor(20, tftLine[1]);
+  tft.setTextColor(TFT_COLOR_yellow);
+  tft.print(__DATE__);
+  tft.setCursor(40, tftLine[2]);
+  tft.setTextColor(TFT_COLOR_gray);
+  tft.print(__TIME__);
 
-  //delay(2000);
   printf("\nIR GUN\n");
   printf("Software date: %s, %s\n", __DATE__, __TIME__);
+  delay(2000);
 
   // Port setup
   pinMode(GPI_swShootN, INPUT_PULLUP);
@@ -437,19 +449,6 @@ void setup()
   esp_task_wdt_init(30, false);  // Disable watchdog
 
   //hitsIdCnt[3]=23;  
-}
-
-
-#define LOOP_minMs  10
-void MainLoop()
-{
-  uint32_t timerMs=0;
-  for (;;) {
-    //printf("LoopTime: %i\n", millis()-(timerMs-LOOP_minMs));
-    while (millis() < timerMs)
-      PollSound();
-    timerMs = millis() + LOOP_minMs;
-  }
 }
 
 
@@ -1212,7 +1211,7 @@ void MainTaskCode(void * pvParameters)
     PollHit();
     delay(1);  // Avoid watchdog prints
     tt = millis()-(timerMs-LOOP_minMs);
-    if (tt > 100)
+    if (tt > 20)
       printf("LoopTime: %i\n", tt);
     while (millis() < timerMs)
       PollSound();
