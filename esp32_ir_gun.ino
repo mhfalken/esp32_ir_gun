@@ -65,6 +65,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RS
 #define TFT_COLOR_gray       0xC618   //1100.0 110.000 1.1000
 #define TFT_COLOR_darkgray   0x4208   //0100.0 010.000 0.1000
 #define TFT_COLOR_red        0x001F
+#define TFT_COLOR_orange     0x03F8   //0000.0 011.111 1.1000
 #define TFT_COLOR_blue       0xF800
 #define TFT_COLOR_green      0x07E0
 #define TFT_COLOR_white      0xFFFF
@@ -154,19 +155,19 @@ char logList[LOG_ENTRY_CNT][LOG_ENTRY_lineSize];
 uint8_t logCnt;    // Total number of log entries
 uint8_t logIndex;  // Current vacant entry
 
+uint8_t irRxErrors;
 
 int tftLine[4] = {16, 35, 54, 73};
 
-// RMT IR RX/TX 
+// RMT IR RX
 #define RMT_MEM_RX RMT_MEM_192
 #define RMT_TICK_ns 1000
 rmt_data_t irRx0Data[64];
 rmt_data_t irRx1Data[64];
 rmt_obj_t *irRx0Recv = NULL;
 rmt_obj_t *irRx1Recv = NULL;
-// TX not used, but needed for RX !!
+// TX not used, but needed for RX to work !!
 rmt_data_t irTxData[64];
-uint8_t irTxData_index;
 rmt_obj_t *irTxSend = NULL;
 
 static EventGroupHandle_t irRx0Events, irRx1Events;
@@ -237,6 +238,8 @@ soundInfo_t soundInfo[] = {
 #define SOUND_hit       1
 #define SOUND_lowBatt   2
 
+bool soundPlaying;  // True while sound is playing
+
 void SoundInit(void)
 {
   audioOut = new AudioOutputI2S(0, 1, 64); // 2nd parameter: 0: External DAC, 1: INTERNAL_DAC
@@ -259,6 +262,7 @@ void Mp3Play(int index)
 
   audiofileProg = new AudioFileSourcePROGMEM(soundInfo[index].data, soundInfo[index].size);
   audioMp3->begin(audiofileProg, audioOut);
+  soundPlaying = true;
 }
 
 
@@ -271,6 +275,7 @@ void PollSound(void)
       printf("MP3 done\n");
       audioMp3->stop();
       delete audiofileProg;
+      soundPlaying = false;
     }
   }
 }
@@ -393,11 +398,7 @@ void RmtSetup()
   {  // This is needed in order for RX to work !!!!!
     Serial.println("init sender failed\n");
   }
-#if 0
-  rmtSetTick(irTxSend, RMT_TICK_ns);
-  // Set carrier signal 40kHz
-  //rmtSetCarrier(irTxSend, true, true, 1000, 1000);
-#endif
+
   if ((irRx0Recv = rmtInit(GPI_irRx0, RMT_RX_MODE, RMT_MEM_RX)) == NULL)
   {
     Serial.println("IR RX0 failed\n");
@@ -410,6 +411,8 @@ void RmtSetup()
   rmtSetTick(irRx1Recv, RMT_TICK_ns);
   rmtSetRxThreshold(irRx0Recv, 1200);
   rmtSetRxThreshold(irRx1Recv, 1200);
+  rmtReadAsync(irRx0Recv, irRx0Data, 12, irRx0Events, false, 0);
+  rmtReadAsync(irRx1Recv, irRx1Data, 12, irRx1Events, false, 0);
 }
 
 
@@ -454,10 +457,6 @@ void setup()
   pinMode(GPI_swSetupN, INPUT_PULLUP);
   digitalWrite(GPO_irShoot, 0);
   pinMode(GPO_irShoot, OUTPUT);
-#if 0
-  pinMode(GPI_irRx0, INPUT);
-  pinMode(GPI_irRx1, INPUT);
-#endif  
   digitalWrite(GPO_haptic, 0);
   pinMode(GPO_haptic, OUTPUT);
   pinMode(GPO_pwmDac, OUTPUT);
@@ -485,8 +484,6 @@ void setup()
   if (irLedTxLevel == 0xff)
     irLedTxLevel = 0;
 
-  irLedTxLevel = 2;  // TBD
-
   SoundInit();
   TagSetup(); // PWM setup
   IrLedPowerSet(irLedTxLevel);
@@ -498,7 +495,6 @@ void setup()
 
 
 // *** IR Disc **********************************************
-
 
 void IrShootTarget()
 {
@@ -601,9 +597,6 @@ void PollTriggerShoot()
 
 // *** IR RX TAG **********************************************
 
-#define IRX_cnt 2           // Number of IR receivers
-int irxGpi[IRX_cnt] = {GPI_irRx0, GPI_irRx1};
-
 // Receive MSB first
 int TagDecode(rmt_data_t *rxData)
 {
@@ -694,27 +687,21 @@ void IrxDecode(rmt_data_t *rxData, int rxNo)
   }
   else {
     // Error
-    // TBD if too many errors, message on LCD (sun light, noise etc.)
+    irRxErrors++;
   }
 }
 
-
 void IrxPoller()
 {
-  rmtReadAsync(irRx0Recv, irRx0Data, 12, irRx0Events, false, 0);
-  rmtReadAsync(irRx1Recv, irRx1Data, 12, irRx1Events, false, 0);
-
-  for (;;) {
-    if (xEventGroupWaitBits(irRx0Events, RMT_FLAG_RX_DONE, 1, 1, 0) == RMT_FLAG_RX_DONE)
-    {
-      IrxDecode(irRx0Data, 0);
-      rmtReadAsync(irRx0Recv, irRx0Data, 12, irRx0Events, false, 0);
-    }
-    if (xEventGroupWaitBits(irRx1Events, RMT_FLAG_RX_DONE, 1, 1, 0) == RMT_FLAG_RX_DONE)
-    {
-      IrxDecode(irRx1Data, 1);
-      rmtReadAsync(irRx1Recv, irRx1Data, 12, irRx1Events, false, 0);
-    }
+  if (xEventGroupWaitBits(irRx0Events, RMT_FLAG_RX_DONE, 1, 1, 0) == RMT_FLAG_RX_DONE)
+  {
+    IrxDecode(irRx0Data, 0);
+    rmtReadAsync(irRx0Recv, irRx0Data, 12, irRx0Events, false, 0);
+  }
+  if (xEventGroupWaitBits(irRx1Events, RMT_FLAG_RX_DONE, 1, 1, 0) == RMT_FLAG_RX_DONE)
+  {
+    IrxDecode(irRx1Data, 1);
+    rmtReadAsync(irRx1Recv, irRx1Data, 12, irRx1Events, false, 0);
   }
 }
 
@@ -845,6 +832,7 @@ void PollDisplay(bool forceUpdate=false)
   static uint16_t skudLast;
   static uint8_t hitsLast[GUN_ID_CNT];
   static uint16_t lastConfigTimeS;
+  static uint32_t lastRxErrorMs;
   uint16_t timeS;
   float temp, vbat, vbatReal;
   char s[20];
@@ -854,6 +842,9 @@ void PollDisplay(bool forceUpdate=false)
     DisplayCharge();
     return;
   }    
+
+  if (!forceUpdate && soundPlaying)
+    return;  // Avoid updating the LCD while sound is playing - takes too long time bwteen polls
 
   if ((millis() > updateMs) || forceUpdate) {
     updateMs = millis() + 300; // Next poll
@@ -883,11 +874,11 @@ void PollDisplay(bool forceUpdate=false)
       tft.setCursor(85, tftLine[0]);
       tft.print(gunShootMode2Ch[gunShootMode]);
 #endif
-      tft.setTextColor(TFT_COLOR_red);
-      tft.setCursor(105, tftLine[0]);
+      tft.setTextColor(TFT_COLOR_blue);
+      tft.setCursor(85, tftLine[0]);
       tft.print(irLedTxLevel2Txt[irLedTxLevel]);
     }
-
+    // VBAT
     if ((vbat != vbatLast) || forceUpdate) {
       tft.setTextColor(TFT_COLOR_top);
       tft.setCursor(120, tftLine[0]);
@@ -905,13 +896,60 @@ void PollDisplay(bool forceUpdate=false)
       vbatLast = vbat;
     }
     if (gunMode == GUN_MODE_tag) {
+      // Status line
       if (forceUpdate) {
+        // ID:GR
         tft.setTextColor(TFT_COLOR_white);
         tft.setCursor(50, tftLine[0]);
         sprintf(s, "%s:%s", gunTagId2Txt[gunTagId], gunTagGroup2Txt[gunTagGroup]); 
         tft.print(s);
-        tft.setTextColor(TFT_COLOR_yellow);
+      }
+      // IR RX error level
+      if ((millis() > lastRxErrorMs) || forceUpdate) {
+        uint32_t level;
+        tft.fillRect(102, 0, 15, 18, TFT_COLOR_top);  
+        tft.setTextColor(TFT_COLOR_orange);
+        tft.setCursor(102, tftLine[0]);
+        level = irRxErrors/2;
+        if (level > 9) {
+          level = 9;
+        }
+        irRxErrors /= 10;
+        tft.print(level);
+        lastRxErrorMs = millis() + 10000;
+      }
+      // SKUD
+      if (forceUpdate) {
         tft.setCursor(0, tftLine[1]);
+        tft.setTextColor(TFT_COLOR_yellow);
+        tft.print("Skud: ");
+      }
+      if ((gunShotsUsed != skudLast) || forceUpdate) {
+        tft.setTextColor(TFT_COLOR_erase);
+        tft.setCursor(60, tftLine[1]);
+        tft.print(skudLast);
+        tft.setTextColor(TFT_COLOR_green);
+        tft.setCursor(60, tftLine[1]);
+        tft.print(gunShotsUsed);
+        skudLast = gunShotsUsed;
+      }
+      // TIME since last config
+      timeS = millis()/1000 - configTimeSOffset;
+      if ((timeS > lastConfigTimeS) || forceUpdate) {
+        tft.setTextColor(TFT_COLOR_erase);
+        tft.setCursor(112, tftLine[1]);
+        sprintf(s, "%02i:%02i", lastConfigTimeS/60, lastConfigTimeS%60);
+        tft.print(s);
+        tft.setTextColor(TFT_COLOR_gray);
+        tft.setCursor(112, tftLine[1]);
+        sprintf(s, "%02i:%02i", timeS/60, timeS%60);
+        tft.print(s);
+        lastConfigTimeS = timeS;
+      }
+      // HITS
+      if (forceUpdate) {
+        tft.setTextColor(TFT_COLOR_yellow);
+        tft.setCursor(0, tftLine[2]);
         tft.print("Hits:");
       }
       for (int i=0; i<GUN_ID_CNT; i++) {
@@ -921,8 +959,10 @@ void PollDisplay(bool forceUpdate=false)
         }
       }
       if (update) {
-        tft.fillRect(60, 18, 159, 20, TFT_COLOR_erase);  
-        tft.setCursor(50, tftLine[1]);
+        tft.fillRect(60, 37, 100, 20, TFT_COLOR_erase);  
+        tft.fillRect(0, 56, 159, 20, TFT_COLOR_erase);  
+        PollSound();
+        tft.setCursor(50, tftLine[2]);
         for (int i=0; i<GUN_ID_CNT; i++) {
           if (hitsIdCnt[i] > 0) {
             tft.setTextColor(TFT_COLOR_gray);
@@ -932,32 +972,6 @@ void PollDisplay(bool forceUpdate=false)
             tft.print(hitsIdCnt[i]);
           }
         }
-      }
-      if (forceUpdate) {
-        tft.setCursor(0, tftLine[2]);
-        tft.setTextColor(TFT_COLOR_yellow);
-        tft.print("Skud: ");
-      }
-      if ((gunShotsUsed != skudLast) || forceUpdate) {
-        tft.setTextColor(TFT_COLOR_erase);
-        tft.setCursor(60, tftLine[2]);
-        tft.print(skudLast);
-        tft.setTextColor(TFT_COLOR_green);
-        tft.setCursor(60, tftLine[2]);
-        tft.print(gunShotsUsed);
-        skudLast = gunShotsUsed;
-      }
-      timeS = millis()/1000 - configTimeSOffset;
-      if ((timeS != lastConfigTimeS) || forceUpdate) {
-        tft.setTextColor(TFT_COLOR_erase);
-        tft.setCursor(112, tftLine[2]);
-        sprintf(s, "%02i:%02i", lastConfigTimeS/60, lastConfigTimeS%60);
-        tft.print(s);
-        tft.setTextColor(TFT_COLOR_gray);
-        tft.setCursor(112, tftLine[2]);
-        sprintf(s, "%02i:%02i", timeS/60, timeS%60);
-        tft.print(s);
-        lastConfigTimeS = timeS;
       }
     }
     forceUpdate = false;
@@ -1197,15 +1211,15 @@ void PollConfigMenu()
 
 
 // *** Core/thread support **********************************************
-
+#if 0
 TaskHandle_t Task0;
 
-void CreateMainTask()
+void CreateTask0()
 {
   // Create a task that will be executed in the Task0code() function, 
   // with priority 1 and executed on core 0
   xTaskCreatePinnedToCore(
-                    MainTaskCode,   /* Task function. */
+                    Task0Code,   /* Task function. */
                     "Task0",     /* name of task. */
                     10000,       /* Stack size of task */
                     NULL,        /* parameter of the task */
@@ -1215,16 +1229,24 @@ void CreateMainTask()
   delay(500); 
 }
 
+// NOT USED!
+void Task0Code(void * pvParameters) 
+{
+  printf("Task0: core: %i\n", xPortGetCoreID());
+  
+  for (;;);
+}
+#endif
+
 #define LOOP_minMs  10
 
-void MainTaskCode(void * pvParameters)
+void MainTaskCode()
 {
   uint32_t timerMs=0, tt;
 
   printf("Main task: core %i\n", xPortGetCoreID());
   LedStatusSet(STATUS_LED_green, 1000, 100);
   PollDisplay(true);
-  //Mp3Play(SOUND_lowBatt);
   for (;;) {
     PollDisplay();
     PollTriggerShoot();
@@ -1234,9 +1256,9 @@ void MainTaskCode(void * pvParameters)
     PollLed();
     PollHealth();
     PollHit();
-    delay(1);  // Avoid watchdog prints
+    IrxPoller();
     tt = millis()-(timerMs-LOOP_minMs);
-    if (tt > 200)
+    if (tt > 100)
       printf("LoopTime: %i\n", tt);
     while (millis() < timerMs)
       PollSound();
@@ -1244,20 +1266,11 @@ void MainTaskCode(void * pvParameters)
   }
 }
 
-void IrxPollerTask() 
-{
-  printf("IRx poller: core: %i\n", xPortGetCoreID());
-  
-  IrxPoller();
-  for (;;);
-}
-
 
 void loop()
 {
-  //dacWrite(26, 200);
-  CreateMainTask();
-  IrxPollerTask();
+  //CreateTask0();
+  MainTaskCode();
 }
 
 
