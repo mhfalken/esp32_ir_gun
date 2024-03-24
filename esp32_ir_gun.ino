@@ -84,14 +84,14 @@ Adafruit_NeoPixel neos(LED_cnt, GPO_neo, NEO_GRB + NEO_KHZ800);
 #define STATUS_LED_charge2  0x008000  // Green
 
 // Globals
-#define GUN_ID_CNT      4  // Max 4 guns
+#define GUN_ID_CNT      16  // Max 16 guns
 
 #define GUN_MODE_tag    0
 #define GUN_MODE_target 1
 uint8_t gunMode;           // Tag or target mode
 const char *gunMode2Txt[] = {"TAG", "TARGET"};
 
-uint8_t gunTagId;        // Gun TX tag (3 bits)
+uint8_t gunTagId;        // Gun TX tag (4 bits)
 const char *gunTagId2Txt[] = {"0", "1", "2", "3"};
 uint8_t gunTagGroup;     // Gun TX group (1 bit)
 const char *gunTagGroup2Txt[] = {"A", "B", "N"};
@@ -156,6 +156,20 @@ uint8_t logIndex;  // Current vacant entry
 
 
 int tftLine[4] = {16, 35, 54, 73};
+
+// RMT IR RX/TX 
+#define RMT_MEM_RX RMT_MEM_192
+#define RMT_TICK_ns 1000
+rmt_data_t irRx0Data[64];
+rmt_data_t irRx1Data[64];
+rmt_obj_t *irRx0Recv = NULL;
+rmt_obj_t *irRx1Recv = NULL;
+// TX not used, but needed for RX !!
+rmt_data_t irTxData[64];
+uint8_t irTxData_index;
+rmt_obj_t *irTxSend = NULL;
+
+static EventGroupHandle_t irRx0Events, irRx1Events;
 
 /* WARNING
   Arduino can't handle typedef below this line if used in functions!!!!!
@@ -371,6 +385,34 @@ void IrLedPowerSet(uint8_t level)
 
 // *** Setup **********************************************
 
+void RmtSetup()
+{
+  irRx0Events = xEventGroupCreate();
+  irRx1Events = xEventGroupCreate();
+  if ((irTxSend = rmtInit(GPO_irShoot, RMT_TX_MODE, RMT_MEM_64)) == NULL)
+  {  // This is needed in order for RX to work !!!!!
+    Serial.println("init sender failed\n");
+  }
+#if 0
+  rmtSetTick(irTxSend, RMT_TICK_ns);
+  // Set carrier signal 40kHz
+  //rmtSetCarrier(irTxSend, true, true, 1000, 1000);
+#endif
+  if ((irRx0Recv = rmtInit(GPI_irRx0, RMT_RX_MODE, RMT_MEM_RX)) == NULL)
+  {
+    Serial.println("IR RX0 failed\n");
+  }
+  if ((irRx1Recv = rmtInit(GPI_irRx1, RMT_RX_MODE, RMT_MEM_RX)) == NULL)
+  {
+    Serial.println("IR RX1 failed\n");
+  }
+  rmtSetTick(irRx0Recv, RMT_TICK_ns);
+  rmtSetTick(irRx1Recv, RMT_TICK_ns);
+  rmtSetRxThreshold(irRx0Recv, 1200);
+  rmtSetRxThreshold(irRx1Recv, 1200);
+}
+
+
 void setup()
 {
   int i;
@@ -406,13 +448,16 @@ void setup()
   printf("Software date: %s, %s\n", __DATE__, __TIME__);
   delay(2000);
 
+  RmtSetup();
   // Port setup
   pinMode(GPI_swShootN, INPUT_PULLUP);
   pinMode(GPI_swSetupN, INPUT_PULLUP);
   digitalWrite(GPO_irShoot, 0);
   pinMode(GPO_irShoot, OUTPUT);
+#if 0
   pinMode(GPI_irRx0, INPUT);
   pinMode(GPI_irRx1, INPUT);
+#endif  
   digitalWrite(GPO_haptic, 0);
   pinMode(GPO_haptic, OUTPUT);
   pinMode(GPO_pwmDac, OUTPUT);
@@ -515,21 +560,15 @@ void IrSendValue(uint8_t value, uint8_t bitLength)
 void IrShootTag()
 {
   // Pre-ample
-  ledcWrite(TAG_channel, 128);
-  delayMicroseconds(2*TAG_pulsMs-40);
-  ledcWrite(TAG_channel, 0);
-  delayMicroseconds(TAG_pulsMs);
+  TagMark();
   // Group
   IrSendValue(gunTagGroup, 1);  // If None just send A (0)
   // Gun
-  IrSendValue(gunTagId, 3);
+  IrSendValue(gunTagId, 4);
   // Post-ample
-  ledcWrite(TAG_channel, 0);
-  delayMicroseconds(TAG_pulsMs);
-  ledcWrite(TAG_channel, 128);
-  delayMicroseconds(2*TAG_pulsMs-40);
-  ledcWrite(TAG_channel, 0);
+  TagSpace();
 }
+
 
 void PollTriggerShoot()
 {
@@ -565,131 +604,117 @@ void PollTriggerShoot()
 #define IRX_cnt 2           // Number of IR receivers
 int irxGpi[IRX_cnt] = {GPI_irRx0, GPI_irRx1};
 
-int IrxDecodeBit(int gpiNo)
+// Receive MSB first
+int TagDecode(rmt_data_t *rxData)
 {
-  int a, b;
-  delayMicroseconds(TAG_pulsMs/2);
-  a = digitalRead(gpiNo);
-  delayMicroseconds(TAG_pulsMs);
-  b = digitalRead(gpiNo);
-  delayMicroseconds(TAG_pulsMs/2);
+  uint32_t bits;
+  uint32_t v, val;
+  int i, cnt;
+  uint32_t hl;
 
-  if (a == b) {
-    printf("IRX bit error\n");
-    return -1;
+  bits = 0;
+  cnt = 0;
+  for (i = 0; i < 20; i++)
+  {
+    v = (rxData[i / 2].val >> ((i % 2) * 16)) & 0xffff;
+    val = v & 0x7fff;
+    hl = (v >> 15)?0:1; // High or Low (RX is inverted)
+    if (val == 0)
+      break;
+    if ((val < 400) || (val > 1200) ||    // Legal [400-600] [800-1200]
+        ((val > 600) && (val < 800)))
+      return -1;
+
+    bits <<= 1;
+    bits |= hl;
+    cnt++;
+    if (val > 700)
+    {
+      bits <<= 1;
+      bits |= hl;
+      cnt++;
+    }
+    //printf("V= %4x, bits= %3x\n", v, bits);
   }
-  return a;
+  if (cnt != 12)
+    return -1;
+#if 0
+  printf("cnt= %2i,  %5x: ", cnt, bits);
+  for (int j = cnt - 1; j >= 0; j--)
+  {
+    if (bits & (1 << j))
+      printf("1");
+    else
+      printf("0");
+  }
+  printf("\n");
+#endif  
+  v = 0;
+  cnt -= 1; // Remove PREAMPLE
+  for (int j = cnt - 2; j > 0; j -= 2)  // Skip END
+  { 
+    v <<= 1;
+    if (bits & (1 << j))
+      v |= 1;
+  }
+  return v;
 }
+
+
+void IrxDecode(rmt_data_t *rxData, int rxNo)
+{
+  static uint32_t lastHitMs;
+  int groupId, gunId;
+  int v;
+#if 0
+  printf("#%i: ", rxNo);
+  for (int i = 0; i < 12; i++)
+  {
+    printf("%4i, ", rxData[i].val & 0x7fff);
+    printf("%4i, ", (rxData[i].val >> 16) & 0x7fff);
+  }
+  printf("\n");
+#endif  
+  v = TagDecode(rxData);
+  if (v >= 0) {
+    groupId = (v >> 4) & 1;
+    gunId = v & 0xf;
+    //printf("#%i: Gr= %i, Gun= %i\n", rxNo, groupId, gunId);
+
+    if ((gunId != gunTagId) && (groupId != gunTagGroup)) {
+      // No suicide, no group hit
+      if (gunId < GUN_ID_CNT) {
+        if (millis() > (lastHitMs + 500)) {  // Hold down
+          hitsIdCnt[gunId]++;
+          gunIsHit = true;
+          lastHitMs = millis();
+        }
+      }
+    }
+  }
+  else {
+    // Error
+    // TBD if too many errors, message on LCD (sun light, noise etc.)
+  }
+}
+
 
 void IrxPoller()
 {
-  int groupId, gunId, irxNo, v, i;
-  uint32_t t, t0;
-  int error;
-  uint32_t preAmpMs, postAmpMs;
+  rmtReadAsync(irRx0Recv, irRx0Data, 12, irRx0Events, false, 0);
+  rmtReadAsync(irRx1Recv, irRx1Data, 12, irRx1Events, false, 0);
 
   for (;;) {
-    error = 0;
-    groupId = gunId = 0;
-    // Look for low signal on all ports
-    for (irxNo= 0; irxNo<IRX_cnt; irxNo++) {
-      if (digitalRead(irxGpi[irxNo]) == 0)
-        break;
+    if (xEventGroupWaitBits(irRx0Events, RMT_FLAG_RX_DONE, 1, 1, 0) == RMT_FLAG_RX_DONE)
+    {
+      IrxDecode(irRx0Data, 0);
+      rmtReadAsync(irRx0Recv, irRx0Data, 12, irRx0Events, false, 0);
     }
-    if (irxNo == IRX_cnt)
-      continue;  // No pulse found
-
-    // Check pre-ample MMS (LLH)
-    t0 = micros();
-    for (;;) {
-      if (digitalRead(irxGpi[irxNo]) == 1)
-        break;
+    if (xEventGroupWaitBits(irRx1Events, RMT_FLAG_RX_DONE, 1, 1, 0) == RMT_FLAG_RX_DONE)
+    {
+      IrxDecode(irRx1Data, 1);
+      rmtReadAsync(irRx1Recv, irRx1Data, 12, irRx1Events, false, 0);
     }
-    t = micros() - t0;
-    preAmpMs = t;
-    if ((t < 950) || (t > 1050)) {  // Must be app. 1ms
-      error++;
-      //continue;  // Wrong pulse
-    }
-    delayMicroseconds(500);
-    // End of pre-ample
-
-    // Decode group id
-    if ((groupId = IrxDecodeBit(irxGpi[irxNo])) == -1) {
-      error++;
-      //continue;
-    }
-    // Decode gun id
-    for (i=0; i<3; i++) {
-      gunId <<= 1;
-      if ((v = IrxDecodeBit(irxGpi[irxNo])) == -1) {
-        error++;
-        //continue;
-      }        
-      gunId |= v;
-    }
-    // Check post-ample SMM (HLL)
-    delayMicroseconds(420);
-    for (i=0; i<100; i++) {
-      if (digitalRead(irxGpi[irxNo]) == 0)
-        break;
-      delayMicroseconds(1);
-    }
-    if (i == 100) {
-      printf("No post-ample\n");
-      postAmpMs = 0;
-      //continue;  // No post ample found
-    }
-    else {
-      t0 = micros();
-      for (;;) {
-        if (digitalRead(irxGpi[irxNo]) == 1)
-          break;
-      }
-      t = micros() - t0;
-      postAmpMs = t;
-      if ((t < 950) || (t > 1050)) {  // Must be app. 1ms
-        printf("t= %i\n", t);
-        error++;
-        //continue;  // Wrong pulse
-      }
-    }
-    // Update global hit values
-    if ((gunId != gunTagId) && (groupId != gunTagGroup)) {
-      // No suicide, no group hit
-      if ((error == 0) && (gunId < GUN_ID_CNT)) {
-        hitsIdCnt[gunId]++;
-        gunIsHit = true;
-        delay(500);  // Hit hold down!
-      }
-    }
-    if (error > 0) { 
-      // error, preAmpMs, groupId, gunId, postAmpMs
-      float p1, p2;
-      p1 = preAmpMs;
-      p1 /=1000;
-      p2 = postAmpMs;
-      p2 /= 1000;
-      sprintf(logList[logIndex++], "%1.2f %i:%i %1.2f", p1, groupId, gunId, p2);
-      printf("%1.2f %i:%i %1.2f", p1, groupId, gunId, p2);
-      if (logIndex == LOG_ENTRY_CNT)
-        logIndex = 0;
-      logCnt++;
-    }
-    /*printf("HIT: Pre= %i, Group= %i, gun= %i, post= %i\n", 
-        preAmpMs, groupId, gunId, postAmpMs);*/
-#if 0    
-    DisplayClr();
-    tft.setTextColor(TFT_COLOR_yellow);
-    tft.setCursor(0, tftLine[0]);
-    tft.print("Error: "); tft.print(error);
-    tft.setCursor(0, tftLine[1]);
-    tft.print("Pre:     "); tft.print(preAmpMs);
-    tft.setCursor(0, tftLine[2]);
-    tft.print("Gr:Id: "); tft.print(groupId); tft.print(", "); tft.print(gunId);
-    tft.setCursor(0, tftLine[3]);
-    tft.print("Post:   "); tft.print(postAmpMs);
-#endif    
   }
 }
 
@@ -1211,7 +1236,7 @@ void MainTaskCode(void * pvParameters)
     PollHit();
     delay(1);  // Avoid watchdog prints
     tt = millis()-(timerMs-LOOP_minMs);
-    if (tt > 20)
+    if (tt > 200)
       printf("LoopTime: %i\n", tt);
     while (millis() < timerMs)
       PollSound();
