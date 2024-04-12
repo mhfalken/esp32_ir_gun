@@ -712,7 +712,7 @@ void IrxPoller()
 void PollHit()
 {
   if (gunIsHit) {
-    gunShootHoldoffMs = millis() + 1000;
+    gunShootHoldoffMs = millis() + 500;
     gunIsHit = false;
     LedStatusSet(STATUS_LED_hit, 500, 50);
     HapticSetMs(300);  // Hit
