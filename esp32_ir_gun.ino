@@ -93,7 +93,7 @@ uint8_t gunMode;           // Tag or target mode
 const char *gunMode2Txt[] = {"TAG", "TARGET"};
 
 uint8_t gunTagId;        // Gun TX tag (4 bits)
-const char *gunTagId2Txt[] = {"0", "1", "2", "3"};
+const char *gunTagId2Txt[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9"};
 uint8_t gunTagGroup;     // Gun TX group (1 bit)
 const char *gunTagGroup2Txt[] = {"A", "B", "N"};
 
@@ -966,7 +966,7 @@ void PollDisplay(bool forceUpdate=false)
         for (int i=0; i<GUN_ID_CNT; i++) {
           if (hitsIdCnt[i] > 0) {
             tft.setTextColor(TFT_COLOR_gray);
-            sprintf(s, "  %i:", i);
+            sprintf(s, "  %i:", i+1);
             tft.print(s);
             tft.setTextColor(TFT_COLOR_red);
             tft.print(hitsIdCnt[i]);
@@ -1078,7 +1078,7 @@ void MenuChoice(menuItem_t *menuItem)
 //                     uint8_t  max   txt-array
 menuItem_t menuMode = {&gunMode, 1, gunMode2Txt};
 menuItem_t menuIrPower = {&irLedTxLevel, 3, irLedTxLevel2Txt};
-menuItem_t menuId = {&gunTagId, 3, gunTagId2Txt};
+menuItem_t menuId = {&gunTagId, 8, gunTagId2Txt};
 menuItem_t menuGroup = {&gunTagGroup, 2, gunTagGroup2Txt};
 menuItem_t menuShootMode = {&gunShootMode, 2, gunShootMode2Txt};
 menuItem_t menuSoundLevel = {&soundLevel, 3, soundLevel2Txt};
