@@ -489,8 +489,13 @@ void setup()
   IrLedPowerSet(irLedTxLevel);
   configTimeSOffset = millis()/1000;
   esp_task_wdt_init(30, false);  // Disable watchdog
-
-  //hitsIdCnt[3]=23;  
+#if 0
+  hitsIdCnt[1]=122;  
+  hitsIdCnt[2]=244;  
+  hitsIdCnt[3]=166;  
+  hitsIdCnt[4]=188;  
+  hitsIdCnt[5]=199;  
+#endif  
 }
 
 
@@ -950,7 +955,7 @@ void PollDisplay(bool forceUpdate=false)
       if (forceUpdate) {
         tft.setTextColor(TFT_COLOR_yellow);
         tft.setCursor(0, tftLine[2]);
-        tft.print("Hits:");
+        tft.print("Hits:  ");
       }
       for (int i=0; i<GUN_ID_CNT; i++) {
         if (hitsIdCnt[i] != hitsLast[i]) {
@@ -959,17 +964,21 @@ void PollDisplay(bool forceUpdate=false)
         }
       }
       if (update) {
-        tft.fillRect(60, 37, 100, 20, TFT_COLOR_erase);  
+        int itemCnt=0;
+        tft.fillRect(50, 37, 100, 20, TFT_COLOR_erase);  
         tft.fillRect(0, 56, 159, 20, TFT_COLOR_erase);  
         PollSound();
         tft.setCursor(50, tftLine[2]);
         for (int i=0; i<GUN_ID_CNT; i++) {
           if (hitsIdCnt[i] > 0) {
+            if (++itemCnt == 3)
+              tft.setCursor(0, tftLine[3]);
             tft.setTextColor(TFT_COLOR_gray);
-            sprintf(s, "  %i:", i+1);
+            sprintf(s, "%i:", i+1);
             tft.print(s);
             tft.setTextColor(TFT_COLOR_red);
             tft.print(hitsIdCnt[i]);
+            tft.print("  ");
           }
         }
       }
