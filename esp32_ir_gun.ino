@@ -1101,7 +1101,7 @@ menuLine_t menuLines[] = {{"Mode:", &menuMode},
                           // {"Shoot:", &menuShootMode},
                           {"Sound:", &menuSoundLevel},
                           {"Charge:", &menuCharge},
-                          {"Log:", &menuLog},
+                          // {"Log:", &menuLog},
                           {"Exit", NULL}};
 
 void MenuSelect(menuLine_t *mLines, int cnt)
