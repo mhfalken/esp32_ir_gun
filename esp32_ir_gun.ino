@@ -35,6 +35,9 @@
 
 #include <esp_task_wdt.h>
 
+// If set enable communication between guns (work in progress)
+#define COMM
+
 // GPIO
 #define GPO_haptic         13  // Vibrations motor (active high)
 #define GPI_vbat           34  // LiPo voltage (4.7k/4.7k)
@@ -46,6 +49,7 @@
 #define GPI_swSetupN       27  // Switch setup/config (active low)
 #define GPO_neo            14  // 4x NEO pixels
 #define GPO_pwmDac         17  // DAC for LED TX power
+#define GPO_amplifierOn    12  // Used to disable the amplifier (avoid WiFi noise)
 // GPIO TFT Display
 #define TFT_DC              2
 #define TFT_RST             4  // Or set to -1 and connect to Arduino RESET pin
@@ -80,7 +84,8 @@ Adafruit_NeoPixel neos(LED_cnt, GPO_neo, NEO_GRB + NEO_KHZ800);
 // LED colors
 #define STATUS_LED_green    0x008000
 #define STATUS_LED_menu     0x000080
-#define STATUS_LED_hit      0xff8080
+#define STATUS_LED_hit      0xff8080  // Enemy has hit your gun
+#define STATUS_LED_kill     0x00ff00  // You have hit another gun
 #define STATUS_LED_charge1  0x808000  // Yellow
 #define STATUS_LED_charge2  0x008000  // Green
 
@@ -92,9 +97,9 @@ Adafruit_NeoPixel neos(LED_cnt, GPO_neo, NEO_GRB + NEO_KHZ800);
 uint8_t gunMode;           // Tag or target mode
 const char *gunMode2Txt[] = {"TAG", "TARGET"};
 
-uint8_t gunTagId;        // Gun TX tag (4 bits)
-const char *gunTagId2Txt[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9"};
-uint8_t gunTagGroup;     // Gun TX group (1 bit)
+uint8_t gunTagId;        // [0-15] Gun TX tag (IR 4 bits) 
+const char *gunTagId2Txt[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"};
+uint8_t gunTagGroup;     // [0-2] Gun TX group (IR 1 bit)
 const char *gunTagGroup2Txt[] = {"A", "B", "N"};
 
 uint16_t gunShotsUsed;
@@ -115,6 +120,11 @@ const char *irLedTxLevel2Txt[] = {"1", "2", "3", "4"};
 uint16_t irLedTxLevel2Pwm[] = {60, 80, 130, 150};  // 80, 260, 760, 1000 mA
 uint8_t logMode;
 const char *logMode2Txt[] = {"Off", "On"};
+#define WIFI_MODE_off    0
+#define WIFI_MODE_server 1
+#define WIFI_MODE_client 2
+uint8_t wifiMode;
+const char *wifiMode2Txt[] = {"Off", "Server", "Client"};
 
 uint8_t hitsIdCnt[GUN_ID_CNT];  // Number of hits by enemy
 volatile bool gunIsHit;   // Set in the RX poller when a hit is detected
@@ -134,6 +144,7 @@ uint16_t configTimeSOffset;
 #define EEPROM_INDEX_gunTagGroup   2
 #define EEPROM_INDEX_soudLevel     3
 #define EEPROM_INDEX_irLedTxLevel  4
+#define EEPROM_INDEX_wifiMode      5
 
 // MENU structures
 typedef struct {
@@ -172,8 +183,23 @@ rmt_obj_t *irTxSend = NULL;
 
 static EventGroupHandle_t irRx0Events, irRx1Events;
 
+#ifdef COMM
+// Gun info and statistics
+typedef struct {
+  IPAddress ipAddr;           // GUN IP address
+  uint8_t connCnt;            // Number of connects (must be 1, guard against reset)
+  uint8_t shots;              // Number of shots used
+  uint8_t kills[GUN_ID_CNT];  // Kills for this gun
+} gunInfo_t;
+
+gunInfo_t gunInfo[GUN_ID_CNT];
+
+IPAddress hostIP(192, 168, 4, 1);  // Server IP address
+bool wifiStatus;  // Server started OR client connected
+#endif
+
 /* WARNING
-  Arduino can't handle typedef below this line if used in functions!!!!!
+  Arduino can't handle typedef below this line if used in functionheaders!!!!!
 */
 
 // Round float to 1 decimal
@@ -259,7 +285,7 @@ void Mp3Play(int index)
     delete audiofileProg;
   }
   printf("Play MP3: %i : %i\n", index, soundInfo[index].size);
-
+  digitalWrite(GPO_amplifierOn, 1);
   audiofileProg = new AudioFileSourcePROGMEM(soundInfo[index].data, soundInfo[index].size);
   audioMp3->begin(audiofileProg, audioOut);
   soundPlaying = true;
@@ -276,6 +302,7 @@ void PollSound(void)
       audioMp3->stop();
       delete audiofileProg;
       soundPlaying = false;
+      digitalWrite(GPO_amplifierOn, 0);
     }
   }
 }
@@ -460,9 +487,10 @@ void setup()
   digitalWrite(GPO_haptic, 0);
   pinMode(GPO_haptic, OUTPUT);
   pinMode(GPO_pwmDac, OUTPUT);
+  pinMode(GPO_amplifierOn, OUTPUT);
 
   // Eeprom restore
-  EEPROM.begin(5);
+  EEPROM.begin(6);
   // Gun mode
   gunMode = EEPROM.read(EEPROM_INDEX_gunMode);
   if (gunMode == 0xff)
@@ -483,7 +511,10 @@ void setup()
   irLedTxLevel = EEPROM.read(EEPROM_INDEX_irLedTxLevel);
   if (irLedTxLevel == 0xff)
     irLedTxLevel = 0;
-
+  // WiFi mode
+  wifiMode = EEPROM.read(EEPROM_INDEX_wifiMode);
+  if (wifiMode == 0xff)
+    wifiMode = WIFI_MODE_off;
   SoundInit();
   TagSetup(); // PWM setup
   IrLedPowerSet(irLedTxLevel);
@@ -496,6 +527,9 @@ void setup()
   hitsIdCnt[4]=188;  
   hitsIdCnt[5]=199;  
 #endif  
+#ifdef COMM
+  CommSetup();
+#endif
 }
 
 
@@ -686,6 +720,20 @@ void IrxDecode(rmt_data_t *rxData, int rxNo)
           hitsIdCnt[gunId]++;
           gunIsHit = true;
           lastHitMs = millis();
+#ifdef COMM
+          char packetBuffer[25];
+          if (wifiMode == WIFI_MODE_client) {
+            if (WifiClientConnect()) {
+              sprintf(packetBuffer, "H:%i:%i:%i:h", gunTagId, gunId, hitsIdCnt[gunId]);
+              UdpTx(hostIP, packetBuffer, strlen(packetBuffer)+1);
+            }
+          }
+          if (wifiMode == WIFI_MODE_server) {
+            gunInfo[gunId].kills[gunTagId] = hitsIdCnt[gunId];
+            sprintf(packetBuffer, "K:%i:k", gunTagId);
+            UdpTx(gunInfo[gunId].ipAddr, packetBuffer, strlen(packetBuffer)+1);
+          }
+#endif
         }
       }
     }
@@ -713,7 +761,8 @@ void IrxPoller()
 
 // *** Poll hit **********************************************
 
-// This is used so only 1 core is accessing the sound, LEDs etc.
+// This is used so only ONE core is accessing the sound, LEDs etc.
+// Currently only ONE core is used!
 void PollHit()
 {
   if (gunIsHit) {
@@ -838,6 +887,7 @@ void PollDisplay(bool forceUpdate=false)
   static uint8_t hitsLast[GUN_ID_CNT];
   static uint16_t lastConfigTimeS;
   static uint32_t lastRxErrorMs;
+  static bool lastWifiStatus;
   uint16_t timeS;
   float temp, vbat, vbatReal;
   char s[20];
@@ -860,7 +910,7 @@ void PollDisplay(bool forceUpdate=false)
     vbat = FloatRound1(vbatReal);
 
     if ((vbatLast > 0) && (vbat > (vbatRealLast + 0.15))) {
-      // Auto char mode
+      // Auto charge mode TBD unstable!
       chargeMode = 1;
       vbatRealLast = vbatReal;
       DisplayCharge(true);
@@ -871,9 +921,9 @@ void PollDisplay(bool forceUpdate=false)
     if (forceUpdate) {
       DisplayClr();
       tft.fillRect(0, 0, 159, 18, TFT_COLOR_top);
-      tft.setTextColor(TFT_COLOR_yellow);
       tft.setCursor(0, tftLine[0]);
-      tft.print(gunMode2Txt[gunMode]);
+      if (gunMode == GUN_MODE_target) 
+        tft.print(gunMode2Txt[gunMode]);
 #if 0
       tft.setTextColor(TFT_COLOR_blue);
       tft.setCursor(85, tftLine[0]);
@@ -883,6 +933,37 @@ void PollDisplay(bool forceUpdate=false)
       tft.setCursor(85, tftLine[0]);
       tft.print(irLedTxLevel2Txt[irLedTxLevel]);
     }
+    // WiFi
+    if (forceUpdate || (lastWifiStatus != wifiStatus)) {
+      lastWifiStatus = wifiStatus;
+      if (gunMode == GUN_MODE_tag) {
+        tft.setCursor(0, tftLine[0]);
+        switch (wifiMode) {
+#ifdef COMM
+        case WIFI_MODE_server:
+          if (wifiStatus)
+            tft.setTextColor(TFT_COLOR_green);
+          else
+            tft.setTextColor(TFT_COLOR_red);
+          tft.print("SR");
+          break;
+        case WIFI_MODE_client:
+          if (wifiStatus)
+            tft.setTextColor(TFT_COLOR_green);
+          else
+            tft.setTextColor(TFT_COLOR_red);
+          tft.print("CL");
+          break;
+#endif          
+        case WIFI_MODE_off:
+        default:
+          tft.setTextColor(TFT_COLOR_gray);
+          tft.print("---");
+          break;
+        }
+      }
+    }
+
     // VBAT
     if ((vbat != vbatLast) || forceUpdate) {
       tft.setTextColor(TFT_COLOR_top);
@@ -905,10 +986,11 @@ void PollDisplay(bool forceUpdate=false)
       if (forceUpdate) {
         // ID:GR
         tft.setTextColor(TFT_COLOR_white);
-        tft.setCursor(50, tftLine[0]);
+        tft.setCursor(40, tftLine[0]);
         sprintf(s, "%s:%s", gunTagId2Txt[gunTagId], gunTagGroup2Txt[gunTagGroup]); 
         tft.print(s);
       }
+#if 0
       // IR RX error level
       if ((millis() > lastRxErrorMs) || forceUpdate) {
         uint32_t level;
@@ -923,6 +1005,7 @@ void PollDisplay(bool forceUpdate=false)
         tft.print(level);
         lastRxErrorMs = millis() + 10000;
       }
+#endif        
       // SKUD
       if (forceUpdate) {
         tft.setCursor(0, tftLine[1]);
@@ -1087,19 +1170,21 @@ void MenuChoice(menuItem_t *menuItem)
 //                     uint8_t  max   txt-array
 menuItem_t menuMode = {&gunMode, 1, gunMode2Txt};
 menuItem_t menuIrPower = {&irLedTxLevel, 3, irLedTxLevel2Txt};
-menuItem_t menuId = {&gunTagId, 8, gunTagId2Txt};
+menuItem_t menuId = {&gunTagId, 15, gunTagId2Txt};
 menuItem_t menuGroup = {&gunTagGroup, 2, gunTagGroup2Txt};
 menuItem_t menuShootMode = {&gunShootMode, 2, gunShootMode2Txt};
 menuItem_t menuSoundLevel = {&soundLevel, 3, soundLevel2Txt};
 menuItem_t menuCharge = {&chargeMode, 1, chargeMode2Txt};
 menuItem_t menuLog = {&logMode, 1, logMode2Txt};
+menuItem_t menuWifi = {&wifiMode, 2, wifiMode2Txt};
 
 menuLine_t menuLines[] = {{"Mode:", &menuMode}, 
                           {"Power:", &menuIrPower},
                           {"Id:", &menuId},
-                          {"Group:", &menuGroup}, 
+                          {"Team:", &menuGroup}, 
                           // {"Shoot:", &menuShootMode},
                           {"Sound:", &menuSoundLevel},
+                          {"WiFi:", &menuWifi},
                           {"Charge:", &menuCharge},
                           // {"Log:", &menuLog},
                           {"Exit", NULL}};
@@ -1153,7 +1238,7 @@ void MenuSelect(menuLine_t *mLines, int cnt)
         sel = 0;
     }
   }
-}
+        }
 
 void PollHealth()
 {
@@ -1177,7 +1262,9 @@ void PollHealth()
 void PollConfigMenu()
 {
   int btnAction;
+  uint8_t lastWifiMode;
 
+  lastWifiMode = wifiMode;
   btnAction = ButtonAction();
   if (btnAction == BTN_shortPressed) {
     if (chargeMode != 0) {
@@ -1186,7 +1273,17 @@ void PollConfigMenu()
       PollDisplay(true);
       return;
     }
-    // Re-load TBD
+    // Force resend hit info from all clients
+    if (wifiMode == WIFI_MODE_server) {
+      DisplayClr();
+      tft.setCursor(10, tftLine[1]);
+      tft.setTextColor(TFT_COLOR_yellow);
+      tft.print("Update hit info");
+      UdpSlaveResend();
+      DelayMsPoll(500);
+      PollDisplay(true);
+      return;
+    }
   }
   else if (btnAction == BTN_longPressed) {
     // Enter MENU by longpress config button
@@ -1202,8 +1299,15 @@ void PollConfigMenu()
     EEPROM.write(EEPROM_INDEX_gunTagGroup, gunTagGroup);
     EEPROM.write(EEPROM_INDEX_soudLevel, soundLevel);
     EEPROM.write(EEPROM_INDEX_irLedTxLevel, irLedTxLevel);
+    EEPROM.write(EEPROM_INDEX_wifiMode, wifiMode);
     EEPROM.commit();
 #endif
+
+    if (wifiMode != lastWifiMode) {
+      // Force restart if WiFi mode has changed
+      DelayMsPoll(1000);
+      ESP.restart();
+    }
     SoundInit();
     LedColorSet(0);
     IrLedPowerSet(irLedTxLevel);
@@ -1265,6 +1369,9 @@ void MainTaskCode()
     PollLed();
     PollHealth();
     PollHit();
+#ifdef COMM
+    PollComm();
+#endif    
     IrxPoller();
     tt = millis()-(timerMs-LOOP_minMs);
     if (tt > 100)
@@ -1275,12 +1382,439 @@ void MainTaskCode()
   }
 }
 
-
 void loop()
 {
-  //CreateTask0();
+#ifdef COMM
+  //PollComm();
+#endif  
+  //not used CreateTask0();
   MainTaskCode();
 }
 
 
+#ifdef COMM
 
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+#include <WiFiUdp.h>
+
+#define HTTP_PORT 80
+
+#define UDP_PORT 8888
+#define UDP_PKT_SIZE_MAX  25
+WiFiUDP Udp;
+
+uint8_t gunIdMax = 2;  // Used to limit HTML table
+
+// *********************************************************************
+// WiFi Server
+// *********************************************************************
+
+// Set these to your desired credentials.
+const char *ssid = "MH-GUNS";
+// NO password: const char *password = "1234";
+
+WiFiServer server(HTTP_PORT);
+
+void WiFiServerSetup()
+{
+  printf("Access point setup: %s\n", ssid);
+  if (!WiFi.softAP(ssid)) {
+    printf("ERROR: Soft AP creation failed.\n");
+    return;
+  }
+  IPAddress myIP = WiFi.softAPIP();
+  printf("Access Point: IP address: %s\n", myIP.toString());
+  server.begin();
+  wifiStatus = true;
+  gunInfo[gunTagId].ipAddr = hostIP;
+  printf("Server started\n");
+}
+
+void WiFiServerLoop()
+{
+  uint16_t totalKills[GUN_ID_CNT];
+  uint16_t totalHits[GUN_ID_CNT];
+  WiFiClient client = server.available();   // listen for incoming clients
+
+  if (client) {                             // if you get a client,
+    printf("\nNew Client: %s.\n", client.remoteIP().toString()); 
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        //Serial.write(c);                    // print it out the serial monitor
+        if (c == '\n') {                    // if the byte is a newline character
+          // if the current line is blank, you got two newline characters in a row.
+          // that's the end of the client HTTP request, so send a response:
+          if (currentLine.length() == 0) {
+            // Calc total kills
+            for (int g=0; g<=gunIdMax; g++) {
+              totalKills[g] = 0;
+              totalHits[g] = 0;
+            }
+            for (int g=0; g<=gunIdMax; g++) {
+              for (int h=0; h<=gunIdMax; h++) {
+                totalKills[g] += gunInfo[g].kills[h];
+                totalHits[h] += gunInfo[g].kills[h];
+              }
+            }
+            // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
+            // and a content-type so the client knows what's coming, then a blank line:
+            client.println("HTTP/1.1 200 OK");
+            client.println("Content-type:text/html");
+            client.println();
+            // Actual contents
+            // Table setup
+            client.println("<style>");
+            client.println("table, th, td {border:1px solid black;border-collapse: collapse;}");
+            client.println("th, td {padding-left: 20px; padding-right: 20px;}");
+            client.println("</style>");
+
+            client.print("<body>");
+            client.print("<h1>LaserTag status<br></h1>");
+            client.println("<table><colgroup><col span='1' style='background-color: #D6EEEE'></colgroup>");
+            for (int r=0; r<=gunIdMax+1; r++) {
+              if (r == 0)
+                client.println("<tr style='background-color: #D6EEEE'>");
+              else {
+                if ((gunInfo[r-1].connCnt == 0) && (r-1 != gunTagId))
+                  continue; // Skip row
+                client.println("<tr>");
+              }
+              for (int c=0; c<=gunIdMax+1; c++) {
+                // Kills total (ekstra column)
+                if (c == 1) {
+                  if (r == 0) 
+                    client.println("<th>Kills</th>");
+                  else
+                  {
+                    client.println("<th>");
+                    client.println(totalKills[r-1]);
+                    client.println("</th>");
+                  }
+                }
+                if ((c == 0) || (gunInfo[c-1].connCnt > 0) || (c-1 == gunTagId)) {
+                  // Kills pr. gunId
+                  client.println("<th>");
+                  if (r == 0) {
+                    if (c != 0)
+                      client.println(gunTagId2Txt[c-1]);
+                  }
+                  else
+                    if (c == 0)
+                      client.println(gunTagId2Txt[r-1]);
+                    else {
+                      if (r == c)
+                        client.println("-");
+                      else
+                        client.println(gunInfo[r-1].kills[c-1]);
+                    }
+                  client.println("</th>");
+                }
+              }
+              // Extra column IP address
+              if (r == 0) 
+                client.println("<th>IP</th>");
+              else
+              {
+                client.println("<th>");
+                client.println(gunInfo[r-1].ipAddr.toString());
+                client.println("</th>");
+              }
+              // Extra column connCnt
+              if (r == 0) 
+                client.println("<th>CC</th>");
+              else
+              {
+                if ((gunInfo[r-1].connCnt != 1) && (r-1 != gunTagId))
+                  client.println("<th style='background-color: #ff4040'>");
+                else
+                  client.println("<th>");
+                if (r-1 == gunTagId)
+                  client.println("-");
+                else                  
+                  client.println(gunInfo[r-1].connCnt);
+                client.println("</th>");
+              }
+              client.println("</tr>");
+            }
+            // Hits row
+            client.println("<tr>");
+            client.println("<th>Hits</th>");
+            client.println("<th>-</th>");
+            for (int c=0; c<=gunIdMax; c++) {
+              if ((gunInfo[c].connCnt > 0) || (c == gunTagId)) {
+                client.println("<th>");
+                client.println(totalHits[c]);
+                client.println("</th>");
+              }
+            }
+            client.println("<th>-</th>");
+            client.println("<th>-</th>");
+            client.println("</tr>");
+            client.println("</table>");
+            client.println("<p>Made by: Michael Hansen</p>");
+            client.print("</body>");
+            // The HTTP response ends with another blank line:
+            client.println();
+            // break out of the while loop:
+            break;
+          } else {    // if you got a newline, then clear currentLine:
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
+        }
+      }
+    }
+    // close the connection:
+    client.stop();
+    printf("Client Disconnected.\n");
+  }
+}
+
+// *********************************************************************
+// WiFi Client
+// *********************************************************************
+
+bool WifiClientConnect()
+{
+  if (WiFi.status() == WL_CONNECTED) {
+    if (wifiStatus == false) {
+      printf("IP address: %s\n", WiFi.localIP().toString());
+      wifiStatus = true;
+    }            
+    return true;
+  }
+  wifiStatus = false;
+
+  // Connecting to a WiFi network
+  printf("Client setup: %s\n", ssid);
+  WiFi.begin(ssid);
+  return false;
+}
+
+
+// *********************************************************************
+// UDP
+// *********************************************************************
+/** Protocol:
+ * C: Client connect with gunId, IP is taken from UDP message
+ * H: Client send information when it is hit
+ * K: Server send hit info back to shooter 
+ * R: Server request all clients to send all hit info at end of game
+*/
+
+
+// Decode messages
+bool forceResendMode;
+
+int MsgNextNum(char *message, int msgSize, int *pos)
+{
+  int i, num;
+
+  for (i=*pos; i<msgSize; i++) {
+    if (message[i] == ':') {
+      num = strtol(&message[*pos], NULL, 10);
+      *pos = i+1;
+      return num;
+    }
+  }
+  return 0;
+}
+
+void MsgDecode(char *message, int msgSize)
+{
+  int pos, num;
+  uint8_t gunId, aGunId, hits;
+  char packetBuffer[UDP_PKT_SIZE_MAX];
+
+  message[msgSize] = 0;  // Force end of line
+  if (msgSize < 5) {
+    printf("MSG: Too short <%s>\n", message);
+    return;
+  }
+  if (message[1] != ':' || message[msgSize-3] != ':') {
+    printf("MSG: Missing : <%s>\n", message);
+    return;
+  }
+  if ((message[0] | 0x20) != message[msgSize-2]) {
+    printf("MSG: Start/end mismatch <%s>\n", message);
+    return;
+  }
+  printf("MSG: ");
+  pos = 2;
+  switch (message[0]) {
+  case 'H':  // Hits H:<source gunId>:<attack gunId>:<total hits>:h
+    printf("H ");
+    gunId = MsgNextNum(message, msgSize, &pos);
+    aGunId = MsgNextNum(message, msgSize, &pos);
+    hits = MsgNextNum(message, msgSize, &pos);
+    printf("%i<-%i: %i\n", gunId, aGunId, hits);
+    gunInfo[aGunId].kills[gunId] = hits;
+    if (!forceResendMode) {
+      // Send confirmed kill
+      sprintf(packetBuffer, "K:%i:k", gunId);
+      UdpTx(gunInfo[aGunId].ipAddr, packetBuffer, strlen(packetBuffer)+1);
+    }
+    break;
+  case 'C':  // Connect C:<source gunId>:c
+    printf("C ");
+    gunId = MsgNextNum(message, msgSize, &pos);
+    printf("%i\n", gunId);
+    gunInfo[gunId].ipAddr = Udp.remoteIP();
+    gunInfo[gunId].connCnt++;
+    if (gunId > gunIdMax)
+      gunIdMax = gunId;
+    break;
+  case 'K':  // Confirmed kill, K:<gunId>:k
+    printf("K %i\n", MsgNextNum(message, msgSize, &pos));
+    LedStatusSet(STATUS_LED_kill, 1000, 0);
+    break;
+  case 'R':  // Force resend, R:0:r
+    printf("R %i\n", MsgNextNum(message, msgSize, &pos));
+    for (gunId=0; gunId<GUN_ID_CNT; gunId++) {
+      if (hitsIdCnt[gunId] > 0) {
+        sprintf(packetBuffer, "H:%i:%i:%i:h", gunTagId, gunId, hitsIdCnt[gunId]);
+        UdpTx(hostIP, packetBuffer, strlen(packetBuffer)+1);
+      }
+    }
+    break;
+  default:
+    printf("Unknown: <%s>\n", message);
+    break;
+  }
+}
+
+void UdpSlaveResend()
+{
+  forceResendMode = true;
+  for (int gunId=0; gunId<=gunIdMax; gunId++) {
+    if ((gunId != gunTagId) && 
+        (gunInfo[gunId].ipAddr != IPAddress(0, 0, 0, 0))) {
+      UdpTx(gunInfo[gunId].ipAddr, "R:0:r", 6);
+      while (UdpRxPoll()) ;  // Empty RX
+    }
+  }
+  DelayMsPoll(500);
+  while (UdpRxPoll()) ;  // Empty RX
+  forceResendMode = false;
+}
+
+void UpdSetup()
+{
+  Udp.begin(UDP_PORT);
+}
+
+int UdpRx(char *packetBuffer)
+{
+  int packetSize = Udp.parsePacket();
+  if (packetSize) {
+    Udp.read(packetBuffer, packetSize);
+    //printf("UDP RX: [%i] <%s>\n", packetSize, packetBuffer);
+    return packetSize;
+  }
+  return 0;
+}
+
+bool UdpRxPoll()
+{
+  char packetBuffer[UDP_PKT_SIZE_MAX];
+  int packetSize;
+
+  packetSize = UdpRx(packetBuffer);
+  if (packetSize > 0) {
+    MsgDecode(packetBuffer, packetSize);
+  }
+  return packetSize > 0;
+}
+
+int UdpTx(IPAddress destIP, const char *packetBuffer, int packetSize)
+{
+  if ((wifiMode == WIFI_MODE_client) && !wifiStatus)
+    return 0;
+  Udp.beginPacket(destIP, UDP_PORT);
+  Udp.write((const uint8_t*)packetBuffer, packetSize);
+  Udp.endPacket();
+  return packetSize;
+}
+
+void UdpPoll()
+{
+  static uint32_t nextTxMs;
+  static bool firstTime=true;
+  char packetBuffer[UDP_PKT_SIZE_MAX];
+  int packetSize;
+
+  UdpRxPoll();
+  // TX
+  if (wifiMode == WIFI_MODE_client) {
+    // Client
+    if (millis() > nextTxMs) {
+      nextTxMs = millis() + 1000;
+      if (WifiClientConnect() && firstTime) {
+        firstTime = false;
+        sprintf(packetBuffer, "C:%i:c", gunTagId);
+        UdpTx(hostIP, packetBuffer, strlen(packetBuffer)+1);
+      }
+    }
+  }
+}
+
+
+// TEST ONLY
+void UdpTest()
+{
+  static int hits;  
+  static uint32_t nextTxMs;
+  char packetBuffer[UDP_PKT_SIZE_MAX];
+
+  if (wifiMode == WIFI_MODE_client) {
+    // Client
+    if (millis() > nextTxMs) {
+      nextTxMs = millis() + 2000;
+      if (WifiClientConnect()) {
+        sprintf(packetBuffer, "H:%i:%i:%i:h", gunTagId, 2, hits++);
+        UdpTx(hostIP, packetBuffer, strlen(packetBuffer)+1);
+      }
+    }
+  }
+}
+
+
+// *********************************************************************
+// Communication common
+// *********************************************************************
+
+void CommSetup() 
+{
+  //wifiMode = WIFI_MODE_server;  
+  if (wifiMode == WIFI_MODE_off)
+    return;
+
+  if (wifiMode == WIFI_MODE_server) {
+    WiFiServerSetup();
+  }
+  if (wifiMode == WIFI_MODE_client) {
+    WifiClientConnect();
+  }
+  UpdSetup();
+}
+
+void PollComm() 
+{
+  static uint32_t nextPollMs;
+  static bool toggle;
+  if (wifiMode == WIFI_MODE_off)
+    return;
+
+  if (wifiMode == WIFI_MODE_server) {
+    WiFiServerLoop();
+  }
+  UdpPoll();
+  //UdpTest();
+
+}
+#endif  // COMM
