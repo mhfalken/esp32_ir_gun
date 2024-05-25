@@ -1,5 +1,8 @@
 # LaserTag guns
 
+When the game is finish, the complete status can be seen in a standard bowser:  
+<img src="git-images/status-page.jpg" width="400">
+
 
 ## How to play
 1. Setup all guns (see below)  
