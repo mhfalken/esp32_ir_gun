@@ -45,7 +45,7 @@ When connected, the shooting gun will light green when it hits another gun.
 - ONE gun is setup as a WiFi access point (server)
 - All the other guns are setup as clients
 - When end of game, short press the config button on the server gun to force all client to re-send all hit data in case some was lost during transmission.
-- The server also have a build in WEB page that can be access with a browser: SSID: MH GUNS, IP: 192.168.4.1
+- The server also have a build-in WEB page that can be access with a browser: SSID: MH GUNS, IP: 192.168.4.1
 
 
 <!-- -->
