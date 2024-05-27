@@ -13,13 +13,11 @@
     IR RX IO32, IO33, IO35
 
   Arduino board setup: 
-    ESP32-Lite:    M5Stack-Core-ESP32
-    M5Stack Core2: M5Stack-Core2
+    ESP32-Lite:    WEMOS LONIN32 Lite
 
   Sounds: 
     MP3, Mono, 44100Hz, 32kb/s
     .mp3-> .h file, use: Bin2C.exe
-  Sound Lib fix: See buttom of lightsaber_V3 file.
 */
 
 #include <Wire.h>
@@ -62,9 +60,10 @@
   Build-in LED  22
 */
 
-Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
+//Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST); // HW SPI
 
-// color definitions  xxxx.x xxx.xxx x.xxxx
+// color definitions  BGR: xxxx.x xxx.xxx x.xxxx
 #define TFT_COLOR_black      0x0000
 #define TFT_COLOR_gray       0xC618   //1100.0 110.000 1.1000
 #define TFT_COLOR_darkgray   0x4208   //0100.0 010.000 0.1000
@@ -882,7 +881,8 @@ void PollDisplay(bool forceUpdate=false)
 {
   // Hits IDs, cnt
   static uint32_t updateMs=0;
-  static float vbatLast=0, vbatRealLast=0;
+  static float vbatMin=-1, vbatLast=0;
+  static int autoChargeCnt=0;
   static uint16_t skudLast;
   static uint8_t hitsLast[GUN_ID_CNT];
   static uint16_t lastConfigTimeS;
@@ -908,15 +908,25 @@ void PollDisplay(bool forceUpdate=false)
     tft.setFont(&FreeSansBold9pt7b);
     vbatReal = LiPoVoltage();
     vbat = FloatRound1(vbatReal);
-
-    if ((vbatLast > 0) && (vbat > (vbatRealLast + 0.15))) {
-      // Auto charge mode TBD unstable!
-      chargeMode = 1;
-      vbatRealLast = vbatReal;
-      DisplayCharge(true);
-      return;
+    // Auto detect charge mode
+    if (vbatMin < 0)
+      vbatMin = vbatReal;  // Init
+    else {
+      if (vbatReal < vbatMin)
+        vbatMin -= 0.01;
+      else
+        vbatMin += 0.01;
     }
-    vbatRealLast = vbatReal;
+    if (vbatReal > (vbatMin + 0.1)) {
+      if (autoChargeCnt++ > 4) {
+        chargeMode = 1;
+        vbatMin = -1;
+        DisplayCharge(true);
+        return;
+      }
+    }
+    else
+      autoChargeCnt = 0;
 
     if (forceUpdate) {
       DisplayClr();
@@ -929,7 +939,7 @@ void PollDisplay(bool forceUpdate=false)
       tft.setCursor(85, tftLine[0]);
       tft.print(gunShootMode2Ch[gunShootMode]);
 #endif
-      tft.setTextColor(TFT_COLOR_blue);
+      tft.setTextColor(TFT_COLOR_yellow);
       tft.setCursor(85, tftLine[0]);
       tft.print(irLedTxLevel2Txt[irLedTxLevel]);
     }
@@ -1021,6 +1031,7 @@ void PollDisplay(bool forceUpdate=false)
         tft.print(gunShotsUsed);
         skudLast = gunShotsUsed;
       }
+#if 0
       // TIME since last config
       timeS = millis()/1000 - configTimeSOffset;
       if ((timeS > lastConfigTimeS) || forceUpdate) {
@@ -1034,6 +1045,7 @@ void PollDisplay(bool forceUpdate=false)
         tft.print(s);
         lastConfigTimeS = timeS;
       }
+#endif      
       // HITS
       if (forceUpdate) {
         tft.setTextColor(TFT_COLOR_yellow);
@@ -1311,11 +1323,11 @@ void PollConfigMenu()
     SoundInit();
     LedColorSet(0);
     IrLedPowerSet(irLedTxLevel);
+    configTimeSOffset = millis()/1000;
     if (chargeMode)
       DisplayCharge(true);
     else
       PollDisplay(true);
-    configTimeSOffset = millis()/1000;
     if (logMode)
       LogPrint();
     logMode = 0;
