@@ -187,6 +187,7 @@ static EventGroupHandle_t irRx0Events, irRx1Events;
 typedef struct {
   IPAddress ipAddr;           // GUN IP address
   uint8_t connCnt;            // Number of connects (must be 1, guard against reset)
+  uint8_t groupId;            // Team id
   uint8_t shots;              // Number of shots used
   uint8_t kills[GUN_ID_CNT];  // Kills for this gun
 } gunInfo_t;
@@ -1441,6 +1442,7 @@ void WiFiServerSetup()
   server.begin();
   wifiStatus = true;
   gunInfo[gunTagId].ipAddr = hostIP;
+  gunInfo[gunTagId].groupId = gunTagGroup;
   printf("Server started\n");
 }
 
@@ -1526,6 +1528,15 @@ void WiFiServerLoop()
                   client.println("</th>");
                 }
               }
+              // Extra column team id
+              if (r == 0) 
+                client.println("<th>Team</th>");
+              else
+              {
+                client.println("<th>");
+                client.println(gunTagGroup2Txt[gunInfo[r-1].groupId]);
+                client.println("</th>");
+              }
               // Extra column IP address
               if (r == 0) 
                 client.println("<th>IP</th>");
@@ -1552,7 +1563,7 @@ void WiFiServerLoop()
               }
               client.println("</tr>");
             }
-            // Hits row
+            // Extra row: Hits 
             client.println("<tr>");
             client.println("<th>Hits</th>");
             client.println("<th>-</th>");
@@ -1565,11 +1576,44 @@ void WiFiServerLoop()
             }
             client.println("<th>-</th>");
             client.println("<th>-</th>");
+            client.println("<th>-</th>");
             client.println("</tr>");
             client.println("</table>");
-            client.println("<p>Made by: Michael Hansen</p>");
+  
+            if (gunTagGroup != 2) {
+              totalKills[0] = 0;
+              totalKills[1] = 0;
+              for (int g=0; g<=gunIdMax; g++) {
+                for (int h=0; h<=gunIdMax; h++) {
+                  totalKills[gunInfo[g].groupId] += gunInfo[g].kills[h];
+                }
+              }
+              client.print("<h2>Team statistic</h2>");
+              client.println("<table><colgroup><col span='1' style='background-color: #D6EEEE'></colgroup>");
+
+              client.println("<tr style='background-color: #D6EEEE'>");
+              client.println("<th></th>");
+              client.println("<th>Kills</th>");
+              client.println("</tr>");
+
+              client.println("<tr>");
+              client.println("<th>A</th>");
+              client.println("<th>");
+              client.println(totalKills[0]);
+              client.println("</th>");
+              client.println("</tr>");
+
+              client.println("<tr>");
+              client.println("<th>B</th>");
+              client.println("<th>");
+              client.println(totalKills[1]);
+              client.println("</th>");
+              client.println("</tr>");
+              client.println("</table>");
+            }
+            client.println("<p>Made by: Michael Hansen 2024</p>");
             client.print("</body>");
-            // The HTTP response ends with another blank line:
+          // The HTTP response ends with another blank line:
             client.println();
             // break out of the while loop:
             break;
@@ -1640,7 +1684,7 @@ int MsgNextNum(char *message, int msgSize, int *pos)
 void MsgDecode(char *message, int msgSize)
 {
   int pos, num;
-  uint8_t gunId, aGunId, hits;
+  uint8_t gunId, aGunId, hits, teamId;
   char packetBuffer[UDP_PKT_SIZE_MAX];
 
   message[msgSize] = 0;  // Force end of line
@@ -1675,8 +1719,10 @@ void MsgDecode(char *message, int msgSize)
   case 'C':  // Connect C:<source gunId>:c
     printf("C ");
     gunId = MsgNextNum(message, msgSize, &pos);
-    printf("%i\n", gunId);
+    teamId = MsgNextNum(message, msgSize, &pos);
+    printf("%i:%s\n", gunId, gunTagGroup2Txt[teamId]);
     gunInfo[gunId].ipAddr = Udp.remoteIP();
+    gunInfo[gunId].groupId = teamId;
     gunInfo[gunId].connCnt++;
     if (gunId > gunIdMax)
       gunIdMax = gunId;
@@ -1768,7 +1814,7 @@ void UdpPoll()
       nextTxMs = millis() + 1000;
       if (WifiClientConnect() && firstTime) {
         firstTime = false;
-        sprintf(packetBuffer, "C:%i:c", gunTagId);
+        sprintf(packetBuffer, "C:%i:%i:c", gunTagId, gunTagGroup);
         UdpTx(hostIP, packetBuffer, strlen(packetBuffer)+1);
       }
     }
