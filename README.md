@@ -47,7 +47,24 @@ When connected, the shooting gun will light green when it hits another gun.
 - When end of game, short press the config button on the server gun to force all client to re-send all hit data in case some was lost during transmission.
 - The server also have a build-in WEB page that can be access with a browser: SSID: MH GUNS, IP: 192.168.4.1
 
-
 <!-- -->
 
+## Firmware update
+
+To update the GUN firmware, use the following link:
+https://espressif.github.io/esptool-js/
+
+Connect the GUN with a USB cable and press **Connect** in the GUI.  
+The binary files are placed in **/bin** directory and must be entered as follow:  
+| Flash Address | File |
+|---------------|------|
+|0x1000|esp32_ir_gun.ino.bootloader.bin|
+|0x8000|esp32_ir_gun.ino.partitions.bin|
+|0xE000|boot_app0.bin|
+|0x10000|esp32_ir_gun.ino.bin|
+
+Press **Add File** to get more entries. It should look like this:  
+
+To flash the GUN, press **Program**, and wait for the flashing to complete.  
+Disconnect the GUN.
 
