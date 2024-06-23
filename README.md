@@ -14,6 +14,13 @@ When the game is finish, the complete status can be seen in a standard bowser:
 1. Login to the  WiFi access point SSID: **MH GUNS**
 1. Use a browser to access WEB page: IP: **192.168.4.1**
 
+### Advanced info
+The person that shoot and hit first has the advantage - the killed person should escape.
+- If hit, the gun is stunned - can't shoot for 1.5 sec, but can still be hit! (try to run away)
+- If hit during stunned mode, the gun is 'dead'- can't shoot for 3 sec and can't be killed for 2 sec. (2 sec to run away)
+
+
+
 ## Configuration (setup)
 Before the guns can be used, some configuration is needed:
 - Each gun must have a unique gun id
