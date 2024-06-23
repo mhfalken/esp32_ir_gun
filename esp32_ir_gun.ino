@@ -26,10 +26,7 @@
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
 #include <SPI.h>
-#include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold9pt7b.h> 
-#include <Fonts/FreeMonoBold9pt7b.h> 
-#include <Fonts/FreeMono9pt7b.h> 
 
 #include <esp_task_wdt.h>
 
@@ -101,14 +98,8 @@ const char *gunTagId2Txt[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
 uint8_t gunTagGroup;     // [0-2] Gun TX group (IR 1 bit)
 const char *gunTagGroup2Txt[] = {"A", "B", "N"};
 
-uint16_t gunShotsUsed;
-#define GUN_SHOOT_MODE_semi      0
-#define GUN_SHOOT_MODE_burst     1
-#define GUN_SHOOT_MODE_automatic 2
-// gunShootMode is disabled !!
-uint8_t gunShootMode;
-const char *gunShootMode2Txt[] = {"Semi", "Burst", "Auto"};
-const char *gunShootMode2Ch[] = {"S", "B", "A"};
+uint16_t gunShotsUsed;  // Total shots fired
+
 uint8_t soundLevel;    // 0-3
 #define SOUND_LEVEL_off 3
 const char *soundLevel2Txt[] = {"Low", "Mid", "High", "Off"};
@@ -126,9 +117,10 @@ uint8_t wifiMode;
 const char *wifiMode2Txt[] = {"Off", "Server", "Client"};
 
 uint8_t hitsIdCnt[GUN_ID_CNT];  // Number of hits by enemy
-volatile bool gunIsHit;   // Set in the RX poller when a hit is detected
-                          // Cleared in main loop
+
+// Game mode
 uint32_t gunShootHoldoffMs;   // Used to block gun from shoot after it is hit
+uint32_t gunHitHoldoffMs;     // Used to avoid double hits and used in dead mode
 uint16_t configTimeSOffset;
 
 // IR LED puls
@@ -167,6 +159,7 @@ uint8_t logIndex;  // Current vacant entry
 
 uint8_t irRxErrors;
 
+// 4 lines, app. 16 chars
 int tftLine[4] = {16, 35, 54, 73};
 
 // RMT IR RX
@@ -194,6 +187,8 @@ typedef struct {
 
 gunInfo_t gunInfo[GUN_ID_CNT];
 
+const char *ssid = "MH-GUNS";
+// NO password: const char *password = "1234";
 IPAddress hostIP(192, 168, 4, 1);  // Server IP address
 bool wifiStatus;  // Server started OR client connected
 #endif
@@ -271,10 +266,20 @@ void SoundInit(void)
   audioOut = new AudioOutputI2S(0, 1, 64); // 2nd parameter: 0: External DAC, 1: INTERNAL_DAC
                                            // 64: buffers for app. 160 ms of delay between polls
   audioOut->SetOutputModeMono(true);
-  if (soundLevel == SOUND_LEVEL_off)
-    audioOut->SetGain(1);  // Low. (Off, but some sounds are allowed)
-  else
-    audioOut->SetGain(soundLevel+1);  // 1-3
+  switch (soundLevel) {
+  case 0:  // Low
+    audioOut->SetGain(0.5); 
+    break;
+  case 1:  // Medium
+    audioOut->SetGain(1.5);
+    break;
+  case 2:  // High
+    audioOut->SetGain(3);
+    break;
+  case SOUND_LEVEL_off:
+    audioOut->SetGain(1);  // (Off, but some critical sounds are allowed)
+    break;
+  }
   audioMp3 = new AudioGeneratorMP3();
 }
 
@@ -608,16 +613,13 @@ void IrShootTag()
 void PollTriggerShoot()
 {
   static uint32_t nextShotMs;
-  static int shots;
 
   if (gunShootHoldoffMs > millis()) 
     return;
 
-  if ((digitalRead(GPI_swShootN) == 0) && (nextShotMs < millis()) && (shots > 0)) {
-    if ((gunShootMode == GUN_SHOOT_MODE_semi) && (shots < 3))
-      return;
+  if ((digitalRead(GPI_swShootN) == 0) && (millis() > nextShotMs)) {
 
-    nextShotMs = millis() + 200;
+    nextShotMs = millis() + 700;  // Shoot holddown
     if (gunMode == GUN_MODE_tag)
       IrShootTag();
     else      
@@ -625,12 +627,7 @@ void PollTriggerShoot()
     gunShotsUsed++;
     if (soundLevel != SOUND_LEVEL_off)
       Mp3Play(SOUND_shot);
-
-    if (gunShootMode != GUN_SHOOT_MODE_automatic)
-      shots--;
   }
-  if (digitalRead(GPI_swShootN) == 1) 
-    shots = 3;
 }
 
 
@@ -695,7 +692,6 @@ int TagDecode(rmt_data_t *rxData)
 
 void IrxDecode(rmt_data_t *rxData, int rxNo)
 {
-  static uint32_t lastHitMs;
   int groupId, gunId;
   int v;
 #if 0
@@ -716,10 +712,24 @@ void IrxDecode(rmt_data_t *rxData, int rxNo)
     if ((gunId != gunTagId) && (groupId != gunTagGroup)) {
       // No suicide, no group hit
       if (gunId < GUN_ID_CNT) {
-        if (millis() > (lastHitMs + 500)) {  // Hold down
+        if (millis() > gunHitHoldoffMs) {  // Hold down
           hitsIdCnt[gunId]++;
-          gunIsHit = true;
-          lastHitMs = millis();
+          if (millis() > gunShootHoldoffMs) {
+            // Normal hit
+            gunHitHoldoffMs = millis() + 400;
+            gunShootHoldoffMs = millis() + 1500;
+            LedStatusSet(STATUS_LED_hit, 500, 50);
+            HapticSetMs(200);  // Hit
+          }
+          else {
+            // Hit in stunned mode -> dead (3s)
+            gunHitHoldoffMs = millis() + 2000;
+            gunShootHoldoffMs = millis() + 3000;
+            LedStatusSet(STATUS_LED_hit, 2000, 100);
+            HapticSetMs(500);  // Hit
+          }
+          if (soundLevel != SOUND_LEVEL_off)
+            Mp3Play(SOUND_hit);
 #ifdef COMM
           char packetBuffer[25];
           if (wifiMode == WIFI_MODE_client) {
@@ -758,22 +768,6 @@ void IrxPoller()
   }
 }
 
-
-// *** Poll hit **********************************************
-
-// This is used so only ONE core is accessing the sound, LEDs etc.
-// Currently only ONE core is used!
-void PollHit()
-{
-  if (gunIsHit) {
-    gunShootHoldoffMs = millis() + 500;
-    gunIsHit = false;
-    LedStatusSet(STATUS_LED_hit, 500, 50);
-    HapticSetMs(300);  // Hit
-    if (soundLevel != SOUND_LEVEL_off)
-      Mp3Play(SOUND_hit);
-  }
-}
 
 // *** Display control **********************************************
 
@@ -874,6 +868,26 @@ void DisplayCharge(bool forceUpdate=false)
   }
 }
 
+// TBD Not used yet ...
+void DisplayServer(bool forceUpdate=false)
+{
+  static uint32_t updateMs=0;
+
+  if ((millis() > updateMs) || forceUpdate) {
+    updateMs = millis() + 300; // Next poll
+    if (forceUpdate) {
+      DisplayClr();
+      tft.setCursor(0, tftLine[0]);
+      tft.print("SSID:");
+      tft.print(ssid);
+      tft.setCursor(0, tftLine[1]);
+      tft.print("WEB: 192.168.4.1");
+    }
+    // List of connected gunIds (2 lines) - Yellow
+    // If force update: Red (no info), Green (info received)
+  }
+}
+
   //tft.drawLine(0, 59, 159, 59, TFT_COLOR_white);
   //tft.fillRect(0, 60, 159, 79, TFT_COLOR_bottom);  
   
@@ -904,9 +918,6 @@ void PollDisplay(bool forceUpdate=false)
 
   if ((millis() > updateMs) || forceUpdate) {
     updateMs = millis() + 300; // Next poll
-    // Intelligent update
-    tft.setTextSize(1);
-    tft.setFont(&FreeSansBold9pt7b);
     vbatReal = LiPoVoltage();
     vbat = FloatRound1(vbatReal);
     // Auto detect charge mode
@@ -930,6 +941,7 @@ void PollDisplay(bool forceUpdate=false)
       autoChargeCnt = 0;
 
     if (forceUpdate) {
+      // Intelligent display update
       DisplayClr();
       tft.fillRect(0, 0, 159, 18, TFT_COLOR_top);
       tft.setCursor(0, tftLine[0]);
@@ -1185,7 +1197,6 @@ menuItem_t menuMode = {&gunMode, 1, gunMode2Txt};
 menuItem_t menuIrPower = {&irLedTxLevel, 3, irLedTxLevel2Txt};
 menuItem_t menuId = {&gunTagId, 15, gunTagId2Txt};
 menuItem_t menuGroup = {&gunTagGroup, 2, gunTagGroup2Txt};
-menuItem_t menuShootMode = {&gunShootMode, 2, gunShootMode2Txt};
 menuItem_t menuSoundLevel = {&soundLevel, 3, soundLevel2Txt};
 menuItem_t menuCharge = {&chargeMode, 1, chargeMode2Txt};
 menuItem_t menuLog = {&logMode, 1, logMode2Txt};
@@ -1195,7 +1206,6 @@ menuLine_t menuLines[] = {{"Mode:", &menuMode},
                           {"Power:", &menuIrPower},
                           {"Id:", &menuId},
                           {"Team:", &menuGroup}, 
-                          // {"Shoot:", &menuShootMode},
                           {"Sound:", &menuSoundLevel},
                           {"WiFi:", &menuWifi},
                           {"Charge:", &menuCharge},
@@ -1381,7 +1391,6 @@ void MainTaskCode()
     PollSound();
     PollLed();
     PollHealth();
-    PollHit();
 #ifdef COMM
     PollComm();
 #endif    
@@ -1424,9 +1433,6 @@ uint8_t gunIdMax = 2;  // Used to limit HTML table
 // WiFi Server
 // *********************************************************************
 
-// Set these to your desired credentials.
-const char *ssid = "MH-GUNS";
-// NO password: const char *password = "1234";
 
 WiFiServer server(HTTP_PORT);
 
