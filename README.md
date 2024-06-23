@@ -64,7 +64,7 @@ The binary files are placed in **/bin** directory and must be entered as follow:
 |0x10000|esp32_ir_gun.ino.bin|
 
 Press **Add File** to get more entries. It should look like this:  
-
+<img src="git-images/flash-gun.png">  
 To flash the GUN, press **Program**, and wait for the flashing to complete.  
-Disconnect the GUN.
+Disconnect the GUN. The GUN firmware is now updated.
 
