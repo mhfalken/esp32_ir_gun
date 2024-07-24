@@ -5,3 +5,6 @@ oscilloscope
 *.mp3
 *.wav
 *.bat
+*.odg
+*.h
+*.ino
