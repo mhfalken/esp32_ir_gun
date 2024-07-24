@@ -2,34 +2,37 @@
 
 Overview TBD
 
-## Initial setup (only needed once)
-
-1. WiFi mode is recommended. One gun must be **Server** and the rest must be **Clients**.
-
-## How to play (no WiFi mode)
-1. Setup all guns (see below)  
-1. Power off all guns  
-1. Power on all guns (sequence doesn't matter)  
-1. Play - have fun  
-
-## How to play in game mode (WiFi mode)
-1. (All guns must be in WiFi mode with one Server - see Initial setup)
+## How to play
+### Game mode (WiFi mode)
+1. (All guns must be in WiFi mode with one Server - see Configuration)
 1. For each gun, select the team and then exit the configuration and power off the gun
-1. Power on all guns (sequence doesn't matter)  
-1. On the **Server** gun, enter configration and setup the game: Laser power, Pre-time and Play-time and exit configration
+1. Power on all guns (sequence doesn't matter). **The guns must not be powered off before the game is over!**  
+1. On the **Server** gun, enter configration and setup the game: Laser **Power**, **Pre**-time and **Play**-time and exit configration
 1. Press short config button to toggle between **Game** screen and **Status** screen.
 1. In **Game** screen: Long press config button to start the game (All guns says: **Get ready**)
 1. (All guns are cleared, the laser power is set to Server laser power, and all guns are locked until the pre-timer ends)
 1. When the Pre-timer ends, then the gun vibrate and un-lock. The game is running. A game timer is shown on the display.
 1. When the game timer ends, the gun says **Game over** and lock the gun.
-1. When all have returned, then on the **Server** gun enter **Game** screen and long press to force update statistic from all guns.
+1. When all have returned (are close to each other), then on the **Server** gun enter **Game** screen and long press to force update statistic from all guns.
 1. Use a browser to connect to WiFi access point: **MH GUNS** and IP= **192.168.4.1** to see the complete status
 <img src="git-images/status-page.PNG" width="600">
+
+Score is kills-hits. The green color marks the winner.  
+If a gun is power cycled, then it is marked as red under CC and the statistic is not valid.
+
+### Old mode (no WiFi mode)
+1. Setup all guns (see below)  
+1. Power on all guns (sequence doesn't matter)  
+1. Play - have fun  
 
 ### Advanced info
 The person that shoot and hit first has the advantage - the killed person should escape.
 - If hit, the gun is stunned - can't shoot for 1.5 sec, but can still be hit! (try to run away)
 - If hit during stunned mode, the gun is 'dead'- can't shoot for 3 sec and can't be killed for 2 sec. (2 sec to run away)
+
+The LCD display information is:  
+<img src="git-images/display-info.PNG" width="500">
+
 
 ## Configuration
 ### Change the configuration:  
@@ -43,7 +46,7 @@ Before the guns can be used for the first time, some configuration is needed.
 The initial configuration is entered by **holding down the configration button during power-up**.  
 - Mode: TAG (TARGET is for future use)
 - Each gun must have a **unique** gun id
-- If WiFi mode is used (see later) then ONE gun must be **Server** and all the others must be **Clients**.
+- If WiFi mode is used (recommended) then ONE gun must be **Server** and all the others must be **Clients**.
 - Hardware options (LCD display)  
 
 
