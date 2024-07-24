@@ -1,18 +1,34 @@
 # LaserTag guns
 
+Overview TBD
+
 When the game is finish, the complete status can be seen in a standard bowser:  
-<img src="git-images/status-page.jpg" width="400">
 
 
-## How to play
+## Initial setup (only needed once)
+
+1. WiFi mode is recommended. One gun must be **Server** the rest msut be **Client**.
+
+## How to play (no WiFi mode)
 1. Setup all guns (see below)  
 1. Power off all guns  
 1. Power on all guns (sequence doesn't matter)  
 1. Play - have fun  
    If WiFI mode is used:
-1. When end of play, on server gun short press config button  
-1. Login to the  WiFi access point SSID: **MH GUNS**
-1. Use a browser to access WEB page: IP: **192.168.4.1**
+
+## How to play in game mode (WiFi mode)'
+1. (All guns must be in WiFi mode with one Server - see Initial setup)
+1. Power on all guns (sequence doesn't matter)  
+1. On the Server gun, enter configration and setup the game: Laser power, pre-time and game time
+1. Exit configraton
+1. Press short config button to toggle between game screen and normal status screen.
+1. In game screen: Long press config button to start game (All guns should say: **Get ready**)
+1. (All guns are cleared, the laser power is set to Server laser power, and all guns are locked until the pre-timer ends)
+1. Pre-timer ends, and the guns vibrate and un-lock. The game is running. A game timer is shown on the display.
+1. When the game timer ends, the gun says **Game over** and lock the gun.
+1. When all have returned, on the Server gun enter game screen and long press to force update statistic from all guns.
+1. Use a browser to connect to WiFi access point: **MH GUNS** and IP= **192.168.4.1** to see the complete status
+<img src="git-images/status-page.jpg" width="400">
 
 ### Advanced info
 The person that shoot and hit first has the advantage - the killed person should escape.
