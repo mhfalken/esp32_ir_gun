@@ -6,7 +6,7 @@ Overview TBD
 ### Game mode (WiFi mode)
 1. (All guns must be in WiFi mode with one Server - see Configuration)
 1. For each gun, select the team and then exit the configuration and power off the gun
-1. Power on all guns (sequence doesn't matter)  
+1. Power on all guns (sequence doesn't matter). **The guns must not be powered off before the game is over!**  
 1. On the **Server** gun, enter configration and setup the game: Laser **Power**, **Pre**-time and **Play**-time and exit configration
 1. Press short config button to toggle between **Game** screen and **Status** screen.
 1. In **Game** screen: Long press config button to start the game (All guns says: **Get ready**)
@@ -16,6 +16,9 @@ Overview TBD
 1. When all have returned (are close to each other), then on the **Server** gun enter **Game** screen and long press to force update statistic from all guns.
 1. Use a browser to connect to WiFi access point: **MH GUNS** and IP= **192.168.4.1** to see the complete status
 <img src="git-images/status-page.PNG" width="600">
+
+Score is kills-hits. The green color marks the winner.  
+If a gun is power cycled, then it is marked as red under CC and the statistic is not valid.
 
 ### Old mode (no WiFi mode)
 1. Setup all guns (see below)  
