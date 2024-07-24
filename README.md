@@ -1,24 +1,28 @@
-# LaserTag guns
+# Laser Tag guns
+<img src="git-images/gun.jpg" height="300"> <img src="git-images/8-guns.PNG" height="300">
 
-Overview TBD
+Here are my laser guns.  
+They work both indoor and outdoor and are able to communicate with each other, so both the target and the shooter knowns when a person is hit.  
+When the fight is over a complete status is available as a web page on the main gun.  
+They are made completely from scratch, with a custom made PCB, Arduino programming and 3D print. They are self-contained so no vest is required and with a rechargeable battery.
 
 ## How to play
-### Game mode (WiFi mode)
+### Game mode (WiFi connected mode)
 1. (All guns must be in WiFi mode with one Server - see Configuration)
 1. For each gun, select the team and then exit the configuration and power off the gun
-1. Power on all guns (sequence doesn't matter). **The guns must not be powered off before the game is over!**  
-1. On the **Server** gun, enter configration and setup the game: Laser **Power**, **Pre**-time and **Play**-time and exit configration
+1. Power on all guns (sequence doesn't matter). **The guns must not be powered off before the game is over and the statistic is shown!**  
+1. On the **Server gun**, enter configration and setup the game: Laser **Power**, **Pre**-time and **Play**-time and exit configration
 1. Press short config button to toggle between **Game** screen and **Status** screen.
 1. In **Game** screen: Long press config button to start the game (All guns says: **Get ready**)
 1. (All guns are cleared, the laser power is set to Server laser power, and all guns are locked until the pre-timer ends)
-1. When the Pre-timer ends, then the gun vibrate and un-lock. The game is running. A game timer is shown on the display.
+1. When the Pre-timer ends, then the gun vibrate and un-lock. The game is active. A game timer is shown on the display.
 1. When the game timer ends, the gun says **Game over** and lock the gun.
 1. When all have returned (are close to each other), then on the **Server** gun enter **Game** screen and long press to force update statistic from all guns.
 1. Use a browser to connect to WiFi access point: **MH GUNS** and IP= **192.168.4.1** to see the complete status
 <img src="git-images/status-page.PNG" width="600">
 
 Score is kills-hits. The green color marks the winner.  
-If a gun is power cycled, then it is marked as red under CC and the statistic is not valid.
+If a gun is powercycled, then it is marked as red under CC and the statistic is not valid.
 
 ### Old mode (no WiFi mode)
 1. Setup all guns (see below)  
@@ -51,7 +55,7 @@ The initial configuration is entered by **holding down the configration button d
 
 
 ### Normal Configuration
-The normal configuration is entered by **long press the config button on the gun**  
+The normal configuration is entered when the gun is powered on and then **long press the config button on the gun**  
 - The IR power level must be set [1-4] 1: indoor, 4 outdoor
 - Each gun must select a team (A, B, C or None (all against all))
 - Sound: Level (Off, Low, Medium or High)
@@ -65,7 +69,11 @@ When connected, the shooting gun will light green when it hits another gun.
 - When end of game, short press the config button on the server gun to force all client to re-send all hit data in case some was lost during transmission.
 - The server also have a build-in WEB page that can be access with a browser: SSID: MH GUNS, IP: 192.168.4.1
 
-<!-- -->
+## Charging
+A fully charged gun can work for app. 3 hours.  
+Power on the gun and then insert a cable connected to a charger into the USB-C plug. The status screen will change to charge mode (autodetected)  
+It take app. 2 hours to completely charge the gun.  
+***NB: The gun can NOT power it self OFF, so it is important that the gun is NOT left with power ON.***
 
 ## Firmware update
 
