@@ -1,7 +1,7 @@
-# Laser Tag guns
+# Laser Tag Guns
+Here are my laser tag guns.  
 <img src="git-images/gun.jpg" height="300"> <img src="git-images/8-guns.PNG" height="300">
 
-Here are my laser guns.  
 They work both indoor and outdoor and are able to communicate with each other, so both the target and the shooter knowns when a person is hit.  
 When the fight is over a complete status is available as a web page on the main gun.  
 They are made completely from scratch, with a custom made PCB, Arduino programming and 3D print. They are self-contained so no vest is required and with a rechargeable battery.
