@@ -1,4 +1,4 @@
-# Laser Tag Guns
+# HomGuns - Laser Tag Guns
 Here are my laser tag guns.  
 <img src="git-images/gun.jpg" height="300"> <img src="git-images/8-guns.PNG" height="300">
 
