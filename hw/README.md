@@ -32,5 +32,12 @@
 1x 3D print  
 
 ## Tips
-Remember the red wire shown on pcb-cpu.jpg. Without it, it won't work!
+In generel look at the pictures in git-images, to see how it is supposed to look like. Unfortunate, some of the images are an older PCB version, but it looks almost the same.  
+Remember the red wire shown on charger-wire.jpg. Without it, it won't work! (It is the only way to connect the battery to the CPU board without using the plug, which there is no room for.)  
+<img src="git-images/charger-wire.jpg" width="200">  
+
+It is a good idea to program the CPU board before mounting it. In this way it is very easy to check it is working when assempling it.  
+Mount all the components on the PCB first, then mount the three add-on boards.  
+The last NEO pixel should be mounted in the tip of the gun and connected with wires to the main board.
+
 
