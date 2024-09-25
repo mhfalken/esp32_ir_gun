@@ -22,9 +22,9 @@
 |1|Speaker | diameter=36 mm| https://www.aliexpress.com/item/1005002939305602.html |
 | 1|Power switch | 10x15 | https://www.aliexpress.com/item/1005005495319044.html|
 | 1|Battery | Li-ion 14500 | https://www.aliexpress.com/item/1005005687014456.html|
-|3| M3 screw | 6mm| |
-|1| M3 screw |  10 mm| |
-|4| M3 screw  | 20 mm| |
+|3| M3 screw | 6mm (PCB mount)| |
+|1| M3 screw |  10 mm (trigger)| |
+|4| M3 screw  | 20 mm (gun assembly)| |
 
 0.5 m various single wires  
 0.7 m servo wires (3 wires together)  
