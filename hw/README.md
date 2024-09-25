@@ -31,5 +31,6 @@
 1x PCB  
 1x 3D print  
 
-
+## Tips
+Remember the red wire shown on pcb-cpu.jpg. Without it, it won't work!
 
