@@ -12,7 +12,7 @@
 | 1| Config button |6x6x10 | https://www.aliexpress.com/item/4001166999847.html|
 | 1| Trigger button | 6x6x4.3| https://www.aliexpress.com/item/4001166999847.html|
 | 5|NEO pixels | SMD 5050| https://www.aliexpress.com/item/1005002653014067.html|
-|9| Resistors| SMD 0508 ||
+|9| Resistors| SMD 0805 ||
 |2|100-220uF| SMD C | https://www.aliexpress.com/item/1005005691643122.html |
 |1|4.7uF | SMD 1206|
 |1|1N5819ws | SMD 0805 | https://www.aliexpress.com/p/order/index.html|
