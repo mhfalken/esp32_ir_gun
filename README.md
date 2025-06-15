@@ -22,7 +22,8 @@ They are made completely from scratch, with a custom made PCB, Arduino programmi
 <img src="git-images/status-page.PNG" width="600">
 
 Score is kills-hits. The green color marks the winner.  
-If a gun is powercycled, then it is marked as red under CC and the statistic is not valid.
+If a gun is powercycled during gameplay, then it is marked as red under CC and the statistic is not valid. (The reason is that part of the statistic is saved on each gun, which is lost if powered off.)  
+There can be a maximum of 10 guns connected in WiFi mode (ESP32 library limitation)
 
 ### Old mode (no WiFi mode)
 1. Setup all guns (see below)  
