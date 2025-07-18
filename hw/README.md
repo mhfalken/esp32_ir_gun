@@ -15,7 +15,7 @@
 |9| Resistors| SMD 0805 ||
 |2|100-220uF| SMD C | https://www.aliexpress.com/item/1005005691643122.html |
 |1|4.7uF | SMD 1206|
-|1|1N5819ws | SMD 0805 | https://www.aliexpress.com/p/order/index.html|
+|1|1N5819ws | SMD 0805 / SOD 323 | https://www.aliexpress.com/p/order/index.html|
 |2| nFET | SI2302 or SI2300 SOT23 ||
 |1| NPN | FMMT617 SOT23 ||
 |1| Haptic feedback motor| 3.7V/16000 | https://www.aliexpress.com/item/1005003099287631.html |
