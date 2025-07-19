@@ -71,6 +71,15 @@ When connected, the shooting gun will light green when it hits another gun.
 - A simplified gamastatistic is shown on the server gun (long press to exit - WEB server doesn't work when this list is active)
 - The server also have a build-in WEB page that can be access with a browser: SSID: MH GUNS, IP: 192.168.4.1
 
+### Gamemodes
+Can only be setup on the **server gun**.  
+
+| Gamemode | Description |  
+|-------|------|
+| Unlimited<br>(Standard) |This is the standard mode when the guns are powered on. Here you have unlimited bullets and unlimited hits (you can't die).|
+| Combat | In this mode you have a **number of magazines** with 6 bullets in each. When a magazine is empty you need to press the button on the side of the gun to change to a new magazine. If the magazine is not empty, the rest of the bullets in the magazine is lost!<br>You have a **limited number of lives**, and when they are used you are dead (the gun doesn't work anymore).<br>Combat mode can only be selected on the master gun i.e. you need to be in connected mode and in game mode in order to use it.|
+
+For both modes, there is a **Pre** timer (time to hide) and a **Play** timer (game lenght).  
 
 ## Charging
 A fully charged gun can work for app. 3 hours.  
