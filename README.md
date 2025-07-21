@@ -88,6 +88,12 @@ It take app. 2 hours to completely charge the gun.
 ***NB: The gun can NOT power it self OFF, so it is important that the gun is NOT left with power ON.***  
 If not used for 6 minutes (and not in gamemode or charging mode) the gun will say 'Idle'.
 
+## Standalone server module (optinal)
+I have made a standalone server controller, so it is easier to control the guns. The hardware is a Cheap Yellow Display (CYD) module, which is an ESP32 with a 2.8" touch screen, that is described here: https://randomnerdtutorials.com/cheap-yellow-display-esp32-2432s028r/.   
+To use it, just download the esp32_ir_gun_server software and it is ready to use. All the guns must be in **Client** mode.  
+The module has a large touch screen, where all the options are present in a menu system. In this way it is easier to setup and control the guns.  
+<img src="git-images/server-main.jpg" height="200"> <img src="git-images/server-game.jpg" height="200">
+
 ## Firmware update
 
 To update the GUN firmware, use the following link:
