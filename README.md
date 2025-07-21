@@ -101,12 +101,12 @@ https://espressif.github.io/esptool-js/
 
 Connect the GUN with a USB cable and press **Connect** in the GUI.  
 The binary files are placed in **/bin** directory and must be entered as follow:  
-| Flash Address | File |
-|---------------|------|
-|0x1000|esp32_ir_gun.ino.bootloader.bin|
-|0x8000|esp32_ir_gun.ino.partitions.bin|
-|0xE000|boot_app0.bin|
-|0x10000|esp32_ir_gun.ino.bin|
+| Flash Address | IR_GUN | IR_GUN_SERVER |
+|---------------|------| -----|
+|0x1000|esp32_ir_gun.ino.bootloader.bin|esp32_ir_gun_server.ino.bootloader.bin|
+|0x8000|esp32_ir_gun.ino.partitions.bin|esp32_ir_gun_server.ino.partitions.bin|
+|0xE000|boot_app0.bin|boot_app0.bin|
+|0x10000|esp32_ir_gun.ino.bin|esp32_ir_gun_server.ino.bin|
 
 Press **Add File** to get more entries. It should look like this:  
 <img src="git-images/flash-gun.png">  
