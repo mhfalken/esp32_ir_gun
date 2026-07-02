@@ -4,10 +4,10 @@
 
 | Count | Component | Info | Link (Aliexpress) |
 |-------|------|-----|--|
-| 1| CPU board | ESP32 board |https://www.aliexpress.com/item/1005006982480169.html | 
+| 1| CPU board | ESP32 board | https://www.aliexpress.com/item/1005009137609466.html | 
 | 1| Display | LCD 0.96" 80x160 | https://www.aliexpress.com/item/1005005300940624.html|
 | 1| Amplifier board| PAM8302| https://www.aliexpress.com/item/32686733187.html|
-| 2| IR receivers | TSOP32240 | https://www.aliexpress.com/item/1005005665455510.html|
+| 2| IR receivers | TSOP32240 | https://www.aliexpress.com/item/1005012450128441.html|
 | 1| IR transmitter | VSLY5940| https://www.aliexpress.com/item/1005005262125949.html|
 | 1| Config button |6x6x10 | https://www.aliexpress.com/item/4001166999847.html|
 | 1| Trigger button | 6x6x4.3| https://www.aliexpress.com/item/4001166999847.html|
@@ -18,10 +18,10 @@
 |1|1N5819ws | SMD 0805 / SOD 323 | https://www.aliexpress.com/item/1005003103906083.html|
 |2| nFET | SI2302 or SI2300 SOT23 ||
 |1| NPN | FMMT617 SOT23 ||
-|1| Haptic feedback motor| 3.7V/16000 | https://www.aliexpress.com/item/1005003099287631.html |
+|1| Haptic feedback motor| 3.7V/16000 | https://www.aliexpress.com/item/1005009196829124.html |
 |1|Speaker | diameter=36 mm| https://www.aliexpress.com/item/1005002939305602.html |
 | 1|Power switch | 10x15 | https://www.aliexpress.com/item/1005005495319044.html|
-| 1|Battery | Li-ion 14500 | https://www.aliexpress.com/item/1005005687014456.html|
+| 1|Battery | Li-ion 14500 | |
 |3| M3 screw | 6mm (PCB mount)| |
 |1| M3 screw |  10 mm (trigger)| |
 |4| M3 screw  | 20 mm (gun assembly)| |
