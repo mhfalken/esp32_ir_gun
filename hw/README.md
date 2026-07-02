@@ -4,7 +4,7 @@
 
 | Count | Component | Info | Link (Aliexpress) |
 |-------|------|-----|--|
-| 1| CPU board | ESP32 board, USB-C | https://www.aliexpress.com/item/1005009137609466.html | 
+| 1| CPU board | ESP32 board Lolin32, USB-C | https://www.aliexpress.com/item/1005009137609466.html | 
 | 1| Display | LCD 0.96" 80x160 | https://www.aliexpress.com/item/1005005300940624.html|
 | 1| Amplifier board| PAM8302| https://www.aliexpress.com/item/32686733187.html|
 | 2| IR receivers | TSOP32240 | https://www.aliexpress.com/item/1005012450128441.html|
